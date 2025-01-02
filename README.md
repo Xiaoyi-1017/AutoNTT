@@ -1,6 +1,14 @@
 # NTT_accel_generator
 Code generator for NTT accelerator
 
+### Prerequisites
+
+AMD Vitis (2022.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
+
+TAPA - https://tapa.readthedocs.io/en/main/
+
+Rapidstream (Not used) - https://docs.rapidstream-da.com/
+
 ### Install Python Requirements
 ```bash
 pip install -r requirements.txt 
@@ -36,6 +44,14 @@ make run TARGET=(sw / xo / hw)  NUM=10000
 Checking if B (number of butterfly units per NTT CORE) and NUM_CH (Number of memory channels) are compatible
 
 Condition: NUM_CH * VECLEN / number of coefficients in parallel -> Integer
+
+Arguments
+- **N**: transform size, polynomial degree
+- **q**: prime modulus (i.e. 12289)
+- **bits**: bit length of coefficients
+- **B**: number of butterfly units in parallel (per stage)
+- **NUM_CH**: number of memory banks used for input
+
 
 
 FULL CODE (DEFAULT)
