@@ -2,14 +2,13 @@
 import argparse
 import math
 import os
+import shutil
 from twiddle_generator import get_nth_root_of_unity_and_psi, twiddle_generator_BR
 
 def is_memory_config_realizable(num_channels, vec_len, coeff_parallel):
-    
     return (num_channels * vec_len) % coeff_parallel == 0
 
-def generate_ini(num_ch, filename="link_config.ini"):
-
+def generate_ini(num_ch, folder):
     if not (1 <= num_ch <= 16):
         raise ValueError("NUM_CH must be between 1 and 16.")
 
@@ -23,15 +22,13 @@ def generate_ini(num_ch, filename="link_config.ini"):
     for i in range(num_ch):
         lines.append(f"sp=ntt_1.y_{i}:HBM[{i + offset}]")
 
+    filename = os.path.join(folder, "link_config.ini")
     with open(filename, "w") as file:
         file.write("\n".join(lines))
 
     print(f"{filename} has been generated.")
 
-
-
-def generate_header(n, mod, bits, B, NUM_CH, output_file="./src/ntt.h"):
-    # Calculating necessary numbers
+def generate_header(n, mod, bits, B, NUM_CH, folder):
     log2N = int(math.log2(n))
     log2B = int(math.log2(B))
 
@@ -45,12 +42,10 @@ def generate_header(n, mod, bits, B, NUM_CH, output_file="./src/ntt.h"):
     else:
         data_format = f"ap_uint<{bits}>"
 
-    # Read the template file
     template_file = "./templates/ntt.h"
     with open(template_file, "r") as file:
         header_content = file.read()
 
-    # Replace placeholders in the template with actual values
     header_content = header_content.replace("{DATA_FORMAT}", data_format)
     header_content = header_content.replace("{MOD}", str(mod))
     header_content = header_content.replace("{N}", str(n))
@@ -60,21 +55,13 @@ def generate_header(n, mod, bits, B, NUM_CH, output_file="./src/ntt.h"):
     header_content = header_content.replace("{NUM_CH}", str(NUM_CH))
     header_content = header_content.replace("{TW_FACTORS}", ', '.join(map(str, tw_factors)))
 
-
-    output_dir = os.path.dirname(output_file)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-
-    # Write the modified header to the output file
+    output_file = os.path.join(folder, "./src/ntt.h")
     with open(output_file, "w") as file:
         file.write(header_content)
 
     print(f"{output_file} has been generated.")
 
-
 def main():
-    # Parse arguments
     parser = argparse.ArgumentParser(description="Calculate the number of NTT cores.")
     parser.add_argument("-N", type=int, default=1024, help="The size of N.")
     parser.add_argument("-q", type=int, default=12289, help="Declare appropriate q")
@@ -84,39 +71,43 @@ def main():
 
     args = parser.parse_args()
 
-    # Assign arguments to variables
     N = args.N
     mod = args.q
     bits = args.bits
     B = args.B
     NUM_CH = args.NUM_CH
-    
-    # Calculate vector length
+
     veclen = 512 // bits
 
-
-    # Check if NUM_NTT_CORES is an integer
     if is_memory_config_realizable(NUM_CH, veclen, 2*B):
-
         NUM_NTT_CORES = NUM_CH * veclen // (2 * B)
 
         print(f"Values used -> N: {N}, B: {B}, NUM_CH: {NUM_CH}, veclen: {veclen}")
-        print(f"Number of NTT cores: {NUM_NTT_CORES} ")
-        print(f"number of channels per ntt_core: {(2*B) // veclen}")
-        print(f"number of ntt_cores per channel: {veclen // (2*B)}")
+        print(f"Number of NTT cores: {NUM_NTT_CORES}")
 
-        # Generate link_config.ini
-        generate_ini(NUM_CH)
-        
-        # Generate ntt.h
-        generate_header(N, mod, bits, B, NUM_CH)
+        # Create new folder
+        folder_name = f"N_{N}_B_{B}_CH_{NUM_CH}"
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
 
-    
+        # Copy all existing files to the new folder
+        source_folder = "./all_files"
+        if os.path.exists(source_folder):
+            for item in os.listdir(source_folder):
+                s = os.path.join(source_folder, item)
+                d = os.path.join(folder_name, item)
+                if os.path.isdir(s):
+                    shutil.copytree(s, d, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(s, d)
+
+        # Generate new files in the folder
+        generate_ini(NUM_CH, folder_name)
+        generate_header(N, mod, bits, B, NUM_CH, folder_name)
+
     else:
-        print(f"NUM_NTT_CORES is not feasible: {NUM_NTT_CORES}")
+        print(f"NUM_NTT_CORES is not feasible.")
         return
-
-    
 
 if __name__ == "__main__":
     main()
