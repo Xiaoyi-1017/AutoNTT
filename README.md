@@ -71,3 +71,13 @@ link_config.ini has been generated.
 ./src/ntt.h has been generated.
 ./src/ntt.cpp has been generated. 
 ```
+
+
+## Updates - 2025/01/10
+### Modified
+- **ntt.cpp**: implemented input_stage and temporal_stage differently so that it does not require further modification
+- **host.cpp**: implemented input & output processing that supports B less than 8 (multiple samples in the same channel)
+- **generate_code.py**: creates folder containing necessary files (src, Makefile, link_config.ini) for different configurations 
+
+### Added
+- **gen_config.py**: generates floorplan & device configs for Rapidstream-tapaopt (stored under "all_files" folder)
