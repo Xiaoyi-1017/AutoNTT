@@ -73,74 +73,6 @@ def generate_header(n, mod, bits, B, NUM_CH, output_file="./src/ntt.h"):
     print(f"{output_file} has been generated.")
 
 
-
-# older version for temporal stages
-def generate_ntt_temporal_stages(N, B):
-
-    log2N = int(math.log2(N))
-    log2B = int(math.log2(B))
-    temporal_stages = log2N - (log2B + 1)
-
-
-    # Declare the streams dynamically
-    tapa_streams_lines = []
-    for stage in range(1, temporal_stages):
-        tapa_streams_lines.append(f"  tapa::streams<int, B> streams{stage}_0;")
-        tapa_streams_lines.append(f"  tapa::streams<int, B> streams{stage}_1;")
-    tapa_streams_lines.append("")
-
-
-    # Add the tapa::task() calls
-    tapa_task_lines = []
-    tapa_task_lines.append("  tapa::task()")
-    
-    for stage in range(temporal_stages):
-        if stage == 0:
-            tapa_task_lines.append(
-                f"      .invoke<tapa::join>(ntt_temporal_stage, {stage}, "
-                f"input_stream0, input_stream1, streams{stage + 1}_0, streams{stage + 1}_1, SAMPLES)"
-            )
-        elif stage == temporal_stages - 1:
-            tapa_task_lines.append(
-                f"      .invoke<tapa::join>(ntt_temporal_stage, {stage}, "
-                f"streams{stage}_0, streams{stage}_1, output_stream0, output_stream1, SAMPLES);"
-            )
-        else:
-            tapa_task_lines.append(
-                f"      .invoke<tapa::join>(ntt_temporal_stage, {stage}, "
-                f"streams{stage}_0, streams{stage}_1, streams{stage + 1}_0, streams{stage + 1}_1, SAMPLES)"
-            )
-
-    return '\n'.join(tapa_streams_lines), '\n'.join(tapa_task_lines)
-    
-
-
-def generate_ntt_kernel(n, B, output_file="./src/ntt.cpp"):
-
-    # Generate the new ntt_temporal_stages function
-    tapa_streams_lines, tapa_task_lines = generate_ntt_temporal_stages(n, B)
-
-    template_file = "./templates/ntt.cpp"
-    with open(template_file, "r") as file:
-        header_content = file.read()
-
-    # Replace placeholders in the template with actual values
-    header_content = header_content.replace("{TAPA_STREAMS}", tapa_streams_lines)
-    header_content = header_content.replace("{TAPA_TASK}", tapa_task_lines)
-
-
-    output_dir = os.path.dirname(output_file)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir)    
-
-
-    with open(output_file, "w") as file:
-        file.write(header_content)
-
-
-    print(f"{output_file} has been generated.")
-
-
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description="Calculate the number of NTT cores.")
@@ -170,7 +102,8 @@ def main():
 
         print(f"Values used -> N: {N}, B: {B}, NUM_CH: {NUM_CH}, veclen: {veclen}")
         print(f"Number of NTT cores: {NUM_NTT_CORES} ")
-        print(f"number of channels per ntt_core: {2*B//veclen}")
+        print(f"number of channels per ntt_core: {(2*B) // veclen}")
+        print(f"number of ntt_cores per channel: {veclen // (2*B)}")
 
         # Generate link_config.ini
         generate_ini(NUM_CH)
