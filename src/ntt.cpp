@@ -49,7 +49,7 @@ void butterfly(int even, int odd, int tw_factor, int *out_even, int* out_odd){
     *out_even = (coeff_even >= mod) ? (coeff_even - mod) : coeff_even;
 }
 
-void bf_unit(int stage, tapa::istream<int>& input0, tapa::istream<int>& input1,
+void bf_unit(int id, int stage, tapa::istream<int>& input0, tapa::istream<int>& input1,
          tapa::ostream<int>& output0, tapa::ostream<int>& output1, int SAMPLES){
     
     int stride = n >> (stage + 1); 
@@ -62,6 +62,7 @@ void bf_unit(int stage, tapa::istream<int>& input0, tapa::istream<int>& input1,
     while(i < DEPTH*SAMPLES){
     #pragma HLS PIPELINE II = 1
         if(!input0.empty() && !input1.empty()){
+
             even = input0.read();
             odd = input1.read();
 
@@ -191,44 +192,16 @@ void mem_stage(const int stage, tapa::istream<int>& input_stream0, tapa::istream
 void ntt_temporal_stage(int stage, tapa::istreams<int, B>& input_stream0, tapa::istreams<int, B>& input_stream1,
                         tapa::ostreams<int, B>& output_stream0, tapa::ostreams<int, B>& output_stream1, int SAMPLES){
     
+    
+
     tapa::streams<int, B> inter_streams0;
     tapa::streams<int, B> inter_streams1;
 
     tapa::task()
-      .invoke<tapa::join, B>(bf_unit, stage, input_stream0, input_stream1, inter_streams0, inter_streams1, SAMPLES)
+      .invoke<tapa::join, B>(bf_unit, tapa::seq(), stage, input_stream0, input_stream1, inter_streams0, inter_streams1, SAMPLES)
       .invoke<tapa::join, B>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1, SAMPLES);
 
 }
-
-
-// Generated code
-void ntt_temporal_stages(tapa::istreams<int, B>& input_stream0,
-                         tapa::istreams<int, B>& input_stream1,
-                         tapa::ostreams<int, B>& output_stream0,
-                         tapa::ostreams<int, B>& output_stream1, int SAMPLES) {
-
-    tapa::streams<int, B> streams1_0;
-  tapa::streams<int, B> streams1_1;
-  tapa::streams<int, B> streams2_0;
-  tapa::streams<int, B> streams2_1;
-  tapa::streams<int, B> streams3_0;
-  tapa::streams<int, B> streams3_1;
-  tapa::streams<int, B> streams4_0;
-  tapa::streams<int, B> streams4_1;
-  tapa::streams<int, B> streams5_0;
-  tapa::streams<int, B> streams5_1;
-
-
-    tapa::task()
-      .invoke<tapa::join>(ntt_temporal_stage, 0, input_stream0, input_stream1, streams1_0, streams1_1, SAMPLES)
-      .invoke<tapa::join>(ntt_temporal_stage, 1, streams1_0, streams1_1, streams2_0, streams2_1, SAMPLES)
-      .invoke<tapa::join>(ntt_temporal_stage, 2, streams2_0, streams2_1, streams3_0, streams3_1, SAMPLES)
-      .invoke<tapa::join>(ntt_temporal_stage, 3, streams3_0, streams3_1, streams4_0, streams4_1, SAMPLES)
-      .invoke<tapa::join>(ntt_temporal_stage, 4, streams4_0, streams4_1, streams5_0, streams5_1, SAMPLES)
-      .invoke<tapa::join>(ntt_temporal_stage, 5, streams5_0, streams5_1, output_stream0, output_stream1, SAMPLES);
-
-}
-
 
 void ntt_spatial_stages(tapa::istreams<int, B>& input_stream0, tapa::istreams<int, B>& input_stream1,
                         tapa::ostreams<int, B>& output_stream0, tapa::ostreams<int, B>& output_stream1, int SAMPLES){
@@ -296,21 +269,24 @@ void ntt_spatial_stages(tapa::istreams<int, B>& input_stream0, tapa::istreams<in
 }
 
 
-void input_module(int id, tapa::mmap<bits<DataVec>> x_in, 
-                 tapa::ostreams<int, kVecLen/2>& input_stream0, tapa::ostreams<int, kVecLen/2>& input_stream1, int SAMPLES){
+
+
+
+void input_module(int id, tapa::mmap<bits<DataVec>> x_in, tapa::ostreams<int, kVecLen>& input_stream0, int SAMPLES){
 
     for(int sample = 0; sample < SAMPLES; sample++){
         for(int i = 0; i < DEPTH; i++){
         #pragma HLS PIPELINE II = 1
             DataVec in = tapa::bit_cast<DataVec>(x_in[sample*DEPTH  + i]);
-            for(int k = 0; k < (kVecLen/2); k++){
+            
+            for(int k = 0; k < kVecLen; k++){
             #pragma HLS UNROLL    
                 input_stream0[k] << in[k];
-                input_stream1[k] << in[k+kVecLen/2];
             }
         }
     }
 }
+
 void output_module(int id, tapa::istreams<int, kVecLen/2>& output_stream0, tapa::istreams<int, kVecLen/2>& output_stream1, 
                     tapa::mmap<bits<DataVec>> y_out, int SAMPLES){
     
@@ -328,32 +304,142 @@ void output_module(int id, tapa::istreams<int, kVecLen/2>& output_stream0, tapa:
     }
 }
 
+void input_mem_stage_int(int id, tapa::istream<int>& x_0, tapa::istream<int>& x_1,
+                             tapa::ostream<int>& even_y, tapa::ostream<int>& odd_y, int SAMPLES){
+    
+    // memory for entry with EVEN indices
+    int mem0[2][DEPTH/2]; 
+    int mem1[2][DEPTH/2];
+    
+    // memory for entry with ODD indices
+    int mem2[2][DEPTH/2]; 
+    int mem3[2][DEPTH/2];
 
+    for(int sample = 0; sample < SAMPLES+1; sample++){
+        int read_i = 0;
+        int write_i = 0;
+
+        bool write_done = (sample == 0) ? true : false; 
+        bool read_done = (sample == SAMPLES) ? true : false;
+        bool processing_done = false;
+
+        while(!processing_done){
+    
+        #pragma HLS pipeline II = 1;
+        #pragma HLS dependence variable=mem0 type=inter false
+        #pragma HLS dependence variable=mem1 type=inter false
+        #pragma HLS dependence variable=mem2 type=inter false
+        #pragma HLS dependence variable=mem3 type=inter false
+            
+            
+
+            if(read_done == false && !x_0.empty() && !x_1.empty()){
+                
+                if(read_i < DEPTH/2){
+                    // For even inputs 0 ~ n/2-1      
+                    mem0[sample % 2][read_i] = x_0.read();
+                    mem1[sample % 2][read_i] = x_1.read();
+                }
+                else{
+                    // For odd inputs n/2 ~ n-1
+                    mem2[sample % 2][read_i-DEPTH/2] = x_0.read();
+                    mem3[sample % 2][read_i-DEPTH/2] = x_1.read();
+                }
+
+                read_i++;
+
+                if(read_i == DEPTH){
+                    read_done = true;
+                } 
+
+            }
+
+            if(write_done == false){
+
+                // For even inputs 0 ~ n/2-1
+                if (write_i % 2 == 0){ // 0, 512 - 2, 514 ...
+                    even_y.write(mem0[(sample-1) % 2][write_i/2]);
+                    odd_y.write(mem2[(sample-1) % 2][write_i/2]);
+                }
+                else{            // 1, 513 - 3, 515 ...
+                    even_y.write(mem1[(sample-1) % 2][write_i/2]);
+                    odd_y.write(mem3[(sample-1) % 2][write_i/2]);
+                }
+
+                write_i++;
+
+                if(write_i == DEPTH){
+                    write_done = true;
+                } 
+                    
+            }
+
+            if(read_done == true && write_done == true){
+                processing_done = true;
+            }
+
+        }
  
+        
 
-void ntt_core(int id, tapa::istreams<int, B> inputstreams_0, tapa::istreams<int, B> inputstreams_1, 
-                       tapa::ostreams<int, B> outputstreams_0, tapa::ostreams<int, B> outputstreams_1, int SAMPLES){
+    }
 
-    tapa::streams<int, B> middlestreams_0("middlestreams_0");
-    tapa::streams<int, B> middlestreams_1("middlestreams_1");
+}
+
+
+void input_mem_stage(tapa::istreams<int, B>& x_0, tapa::istreams<int, B>& x_1,
+                        tapa::ostreams<int, B>& y_0, tapa::ostreams<int, B>& y_1, int SAMPLES){
+    
     tapa::task()
-        .invoke(ntt_temporal_stages, inputstreams_0, inputstreams_1, middlestreams_0, middlestreams_1, SAMPLES)
-        .invoke(ntt_spatial_stages, middlestreams_0, middlestreams_1, outputstreams_0, outputstreams_1, SAMPLES); 
+        .invoke<tapa::join, B>(input_mem_stage_int, tapa::seq(), x_0, x_1, y_0, y_1, SAMPLES);
+
+}
+
+
+void divide_streams(tapa::istreams<int, 2*B> input_streams, tapa::ostreams<int, B> outputstreams_0, tapa::ostreams<int, B> outputstreams_1, int SAMPLES){
+
+    for(int sample = 0; sample < SAMPLES; sample++){
+        for(int i = 0; i < DEPTH; i++){
+        #pragma HLS pipeline II = 1;
+
+            for(int k = 0; k < B; k++){
+            #pragma HLS UNROLL    
+                outputstreams_0[k] << input_streams[k].read();
+            }
+
+            for(int k = 0; k < B; k++){
+            #pragma HLS UNROLL    
+                outputstreams_1[k] << input_streams[k+B].read();
+            }
+        }
+    }
+}
+
+
+void ntt_core(int id, tapa::istreams<int, 2*B> inputstreams, tapa::ostreams<int, B> outputstreams_0, tapa::ostreams<int, B> outputstreams_1, int SAMPLES){
+
+    tapa::streams<int, B*(temporal_stages+2)> even_streams("even_streams");
+    tapa::streams<int, B*(temporal_stages+2)> odd_streams("odd_streams");
+    
+    tapa::task()
+        .invoke(divide_streams, inputstreams, even_streams, odd_streams, SAMPLES)
+        .invoke(input_mem_stage, even_streams, odd_streams, even_streams, odd_streams, SAMPLES)
+        .invoke<tapa::join, temporal_stages>(ntt_temporal_stage, tapa::seq(), even_streams, odd_streams, even_streams, odd_streams, SAMPLES)
+        .invoke(ntt_spatial_stages, even_streams, odd_streams, outputstreams_0, outputstreams_1, SAMPLES); 
 }
 
 
 
 void ntt(tapa::mmaps<bits<DataVec>, NUM_CH> x, tapa::mmaps<bits<DataVec>, NUM_CH> y, int SAMPLES){
     
-    // std::cout << "ntt running" << std::endl;
-    tapa::streams<int, NUM_CH*kVecLen/2> inputstreams_0("inputstreams_0");
-    tapa::streams<int, NUM_CH*kVecLen/2> inputstreams_1("inputstreams_1");
+    tapa::streams<int, NUM_CH*kVecLen> inputstreams("inputstreams");
     tapa::streams<int, NUM_CH*kVecLen/2> outputstreams_0("outputstreams_0");
     tapa::streams<int, NUM_CH*kVecLen/2> outputstreams_1("outputstreams_1");
 
     tapa::task()
-        .invoke<tapa::join, NUM_CH>(input_module, tapa::seq(), x, inputstreams_0, inputstreams_1, SAMPLES)
-        .invoke<tapa::join, NUM_CORE>(ntt_core, tapa::seq(), inputstreams_0, inputstreams_1, outputstreams_0, outputstreams_1, SAMPLES)
+        .invoke<tapa::join, NUM_CH>(input_module, tapa::seq(), x, inputstreams, SAMPLES)
+        .invoke<tapa::join, NUM_CORE>(ntt_core, tapa::seq(), inputstreams, outputstreams_0, outputstreams_1, SAMPLES)
         .invoke<tapa::join, NUM_CH>(output_module, tapa::seq(), outputstreams_0, outputstreams_1, y, SAMPLES);
     
 }
+

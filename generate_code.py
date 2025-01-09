@@ -178,9 +178,6 @@ def main():
         # Generate ntt.h
         generate_header(N, mod, bits, B, NUM_CH)
 
-        # Generate ntt.cpp
-        generate_ntt_kernel(N, B)
-
     
     else:
         print(f"NUM_NTT_CORES is not feasible: {NUM_NTT_CORES}")

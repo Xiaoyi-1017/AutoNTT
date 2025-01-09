@@ -25,7 +25,7 @@ const int log2B = {log2B};
 
 // WIDTH: number of coeffs processed in parallel (per NTT CORE)
 const int WIDTH = 2*B;
-const int DEPTH = n / (2*B);
+const int DEPTH = n / WIDTH;
 
 const int spatial_stages = log2B + 1;
 const int temporal_stages = log2N - (log2B + 1);
@@ -35,6 +35,7 @@ const int NUM_CH = {NUM_CH};
 const int NUM_CORE = kVecLen*NUM_CH / (2*B);
 
 const int NUM_CH_PER_CORE = (2*B) / kVecLen; 
+const int NUM_CORE_PER_CH = kVecLen / (2*B);
 
 
 // Bit reversed array of twiddle factors

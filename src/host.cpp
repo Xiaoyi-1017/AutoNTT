@@ -144,6 +144,98 @@ void print_array(std::vector<Data, tapa::aligned_allocator<Data>> arr, int SAMPL
     }
 }
 
+void process_input0(std::vector<Data, tapa::aligned_allocator<Data>> input, 
+                std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> &X, int SAMPLES){
+    
+    for(int i = 0; i < SAMPLES/NUM_CORE; i++){
+        for(int j = 0; j < NUM_CH; j++){
+            for(int depth_idx = 0; depth_idx < DEPTH; depth_idx++){
+                for(int k = 0; k < NUM_CORE_PER_CH; k++){
+
+                int sample_idx = NUM_CORE*i + NUM_CORE_PER_CH*j + k; 
+
+                    for(int l = 0; l < WIDTH; l++){
+                        X[j][NUM_CORE_PER_CH*n*i + kVecLen*depth_idx +  WIDTH*k + l] = input[n*sample_idx + depth_idx*WIDTH + l];
+                    }
+                } 
+            }  
+        }
+    }
+}
+
+void process_input1(std::vector<Data, tapa::aligned_allocator<Data>> input, 
+                std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> &X, int SAMPLES){
+    
+    for(int i = 0; i < SAMPLES/NUM_CORE; i++){
+        for(int x = 0; x < NUM_CORE; x++){
+            int sample_idx = NUM_CORE*i + x;
+
+            for(int j = 0; j < n/(NUM_CH_PER_CORE*kVecLen); j++){
+                
+                for(int y = 0; y < NUM_CH_PER_CORE; y++){
+                    int cc = NUM_CH_PER_CORE*x + y;
+
+                    for(int k = 0; k < kVecLen; k++){
+                        X[cc][(n/NUM_CH_PER_CORE)*i + kVecLen*j + k] = input[n*sample_idx + kVecLen*(j*NUM_CH_PER_CORE+y)+ k];
+                    }
+                }
+
+            }
+        }
+    }
+}
+
+void process_output0(std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> Y, 
+                    std::vector<Data, tapa::aligned_allocator<Data>> &out_hw, int SAMPLES){
+    
+    for(int i = 0; i < SAMPLES/NUM_CORE; i++){
+        for(int j = 0; j < NUM_CH; j++){
+            for(int depth_idx = 0; depth_idx < DEPTH; depth_idx++){
+                for(int k = 0; k < NUM_CORE_PER_CH; k++){
+
+                int sample_idx = NUM_CORE*i + NUM_CORE_PER_CH*j + k; 
+
+                    for(int l = 0; l < WIDTH; l++){
+                        out_hw[n*sample_idx + depth_idx*WIDTH + l] = Y[j][NUM_CORE_PER_CH*n*i + kVecLen*depth_idx +  WIDTH*k + l]; 
+                    }
+                } 
+            }  
+        }
+    }
+}
+
+void process_output1(std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> Y, 
+                    std::vector<Data, tapa::aligned_allocator<Data>> &out_hw, int SAMPLES){
+    
+    for (int i = 0; i < SAMPLES/NUM_CORE; i++) {
+        for(int x = 0; x < NUM_CORE; x++){
+            
+            int sample_idx = NUM_CORE*i + x;
+            
+            // NTT_CORE LOOP
+            for (int j = 0; j < n / (NUM_CH_PER_CORE*kVecLen); j++) {       
+                for (int y = 0; y < NUM_CH_PER_CORE; y++){
+
+                    int depth_idx = NUM_CH_PER_CORE*j + y;
+                    
+                    int cc = NUM_CH_PER_CORE*x + y; // Memory Channel
+
+                    for (int k = 0; k < kVecLen; k++) {
+                        
+                        int idx = i * n / NUM_CH_PER_CORE + j * kVecLen  + k;   
+                        int out_hw_idx =  n * sample_idx +  kVecLen *depth_idx + k;
+
+                        out_hw[out_hw_idx] = Y[cc][idx];   
+
+                    }
+                }   
+            }
+            
+        }
+    }
+}
+
+
 
 
 void ntt(tapa::mmaps<bits<DataVec>, NUM_CH> x, tapa::mmaps<bits<DataVec>, NUM_CH> y, int SAMPLES);
@@ -157,12 +249,20 @@ int main(int argc, char* argv[]) {
     const int SAMPLES = argc > 1 ? atoll(argv[1]) : 1000;
 
     const int N = n;
-    
+    int extra = 0;
 
-    std::vector<Data, tapa::aligned_allocator<Data>> input(n*SAMPLES);
-    std::vector<Data, tapa::aligned_allocator<Data>> out_sw(n*SAMPLES);
-    std::vector<Data, tapa::aligned_allocator<Data>> out_hw(n*SAMPLES);
-    std::vector<Data, tapa::aligned_allocator<Data>> out_hw_BR(n*SAMPLES);
+    if (SAMPLES % NUM_CORE != 0){
+        extra += NUM_CORE -  SAMPLES % NUM_CORE;
+    }
+
+    const int compensated_NUM_SAMPLES = SAMPLES + extra;
+
+    // Added SAMPLES % NUM_CORE so that it could be dvided by NUM_CORE 
+    std::vector<Data, tapa::aligned_allocator<Data>> input(n*compensated_NUM_SAMPLES);
+    
+    std::vector<Data, tapa::aligned_allocator<Data>> out_sw(n*compensated_NUM_SAMPLES);
+    std::vector<Data, tapa::aligned_allocator<Data>> out_hw(n*compensated_NUM_SAMPLES);
+    std::vector<Data, tapa::aligned_allocator<Data>> out_hw_BR(n*compensated_NUM_SAMPLES);
 
     std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> X(NUM_CH);
     std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> Y(NUM_CH);
@@ -177,6 +277,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Number of butterfly units in parallel: " << B << std::endl; 
     std::cout << "Number of input Memory channels: " << NUM_CH << std::endl;
     std::cout << "Number of NTT cores: " << NUM_CORE << std::endl;
+    std::cout << "DEPTH per sample: " << DEPTH << std::endl;
 
   
     srand(time(NULL));
@@ -192,55 +293,25 @@ int main(int argc, char* argv[]) {
 
 
     // Resize each channel into appropriate size
-    int CHANNEL_SIZE = SAMPLES*n/NUM_CH;
+    int CHANNEL_SIZE = n*compensated_NUM_SAMPLES/NUM_CH;
 
     for (int cc = 0; cc < NUM_CH; ++cc) {
         X[cc].resize(CHANNEL_SIZE, 0);
         Y[cc].resize(CHANNEL_SIZE, 0);
     }
 
-
-    for (int i = 0; i < SAMPLES/NUM_CORE; i++) {
-        for(int x = 0; x < NUM_CORE; x++){
-
-            // NTT_CORE LOOP
-            for (int j = 0; j < N / (NUM_CH_PER_CORE*kVecLen); j++) {       
-                for (int y = 0; y < NUM_CH_PER_CORE; y++){
-                    
-                    int cc = NUM_CH_PER_CORE*x + y; // Memory Channel
-
-                    for (int k = 0; k < (kVecLen/2); k++) {
-                        
-                        int idx = i * N / NUM_CH_PER_CORE + j * kVecLen  + k;                           
-                        int input_base_idx = N * (NUM_CORE*i + x) + (kVecLen/2) *(NUM_CH_PER_CORE*j + y) + k;
-
-                        X[cc][idx] = input[input_base_idx];  
-                        X[cc][idx + kVecLen/2] = input[input_base_idx + n / 2];  
-
-                    }
-
-                    // for(int k = 0; k < kVecLen; k++){
-                    //     int idx = i * N / NUM_CH_PER_CORE + j * kVecLen  + k;   
-                    //     int input_base_idx = N * (NUM_CORE*i + x) + (kVecLen) *(NUM_CH_PER_CORE*j + y) + k;
-                        
-                    //     X[cc][idx] = input[input_base_idx]; 
-                    // }
-                    
-                    // for(int k = 0; k < kVecLen; k++){
-                    //     int idx = i * N / (NUM_CH_PER_CORE*kVecLen) + j * kVecLen  + k;   
-                    //     std::cout << X[cc][idx] << " ";
-                    // }
-                    // std::cout << std::endl;
-                }   
-            }
-            
-        }
+    if (NUM_CORE_PER_CH > 1){
+        process_input0(input, X, compensated_NUM_SAMPLES);
     }
+    else{
+        process_input1(input, X, compensated_NUM_SAMPLES);
+    }
+
+    
+
     
     std::cout << "Test data generation DONE" << std::endl;
 
-
-    // ntt_ct_temporal(input, out_sw, SAMPLES);
     sw_ntt(input, out_sw, psi, mod, SAMPLES);
 
     std::cout << "SW Computation Done" << std::endl;
@@ -248,48 +319,28 @@ int main(int argc, char* argv[]) {
     int64_t kernel_time_ns =
       tapa::invoke(ntt, FLAGS_bitstream,
                    tapa::read_only_mmaps<Data, NUM_CH>(X).reinterpret<bits<DataVec>>(),
-                   tapa::write_only_mmaps<Data, NUM_CH>(Y).reinterpret<bits<DataVec>>(), SAMPLES/NUM_CORE);
+                   tapa::write_only_mmaps<Data, NUM_CH>(Y).reinterpret<bits<DataVec>>(), (SAMPLES + extra)/NUM_CORE);
 
 
     std::clog << "kernel time: " << kernel_time_ns * 1e-9 << " s" << std::endl;
     std::clog << "kernel time: " << kernel_time_ns * 1e-6  << " ms" << std::endl;
     std::clog << "kernel time: " << kernel_time_ns * 1e-3 << " us" << std::endl;
-
-
-    for (int i = 0; i < SAMPLES/NUM_CORE; i++) {
-        for(int x = 0; x < NUM_CORE; x++){
-            
-            int sample_idx = NUM_CORE*i + x;
-            
-            // NTT_CORE LOOP
-            for (int j = 0; j < N / (NUM_CH_PER_CORE*kVecLen); j++) {       
-                for (int y = 0; y < NUM_CH_PER_CORE; y++){
-
-                    int depth_idx = NUM_CH_PER_CORE*j + y;
-                    
-                    int cc = NUM_CH_PER_CORE*x + y; // Memory Channel
-
-                    for (int k = 0; k < kVecLen; k++) {
-                        
-                        int idx = i * N / NUM_CH_PER_CORE + j * kVecLen  + k;   
-                        int out_hw_idx =  N*sample_idx +  kVecLen *depth_idx + k;
-
-                        out_hw[out_hw_idx] = Y[cc][idx];   
-                    }
-                }   
-            }
-            
-        }
-    }
     
+    
+    if (NUM_CORE_PER_CH > 1){
+        process_output0(Y, out_hw, compensated_NUM_SAMPLES);
+    }
+    else{
+        process_output1(Y, out_hw, compensated_NUM_SAMPLES);
+    }
 
     
     std::cout << "Rearranging ...\n";
-    bit_reverse_hw_out(out_hw, out_hw_BR, SAMPLES);
+    bit_reverse_hw_out(out_hw, out_hw_BR, compensated_NUM_SAMPLES);
     std::cout << "Done\n";
         
-    // Printing
-    // for(int i = 0; i < SAMPLES; i++){
+    //Printing
+    // for(int i = 0; i < compensated_NUM_SAMPLES; i++){
     //  std::cout << "INPUT" << std::endl;
     //  for(int j = 0; j < n / WIDTH; j++){
     //      for(int k = 0; k < WIDTH; k++){

@@ -2,7 +2,7 @@
 APP := ntt
 HOST := host_ntt
 
-NUM := 160 
+NUM := 100 
 TARGET := sw # Default target is 'sw', can be overridden
 
 KERNEL_FILE := ./src/ntt.cpp
@@ -14,21 +14,19 @@ CLOCK_PERIOD := 3.33
 PLATFORM := xilinx_u280_gen3x16_xdma_1_202211_1
 
 BITSTREAM_XO := $(APP).xo
+SIM_DIR1 := ./before_optimized
+SIM_DIR2 := ./after_optimized
 
-SIM_DIR1 := ./waveform_before_optimized
-SIM_DIR2 := ./waveform_after_optimized
+OPT_WORK_DIR := ./run_optimized
 
-WORK_DIR := ./run_optimized
-
-HW_WORK_DIR := ./_x
+HW_WORK_DIR := ./_x_hw
 
 HW_WORK_DIR_OPT := ./_x_opt
 
-BITSTREAM_DIR := ./hw_original
-
-BITSTREAM_OPT_DIR := ./hw_optimized
-
 BITSTREAM_HW := $(APP).$(PLATFORM).hw.xclbin
+
+HW_OUTPUT := ./hw_original
+HW_OPT_OUTPUT := ./hw_optimized
 
 SAVE_WAVEFORM := 1 # Default to saving waveform
 
@@ -152,7 +150,7 @@ run-opt:
 build-hw:
 	@echo "Building the hardware configuration..."
 	v++ \
-		-o $(BITSTREAM_DIR)/$(BITSTREAM_HW) \
+		-o $(HW_OUTPUT)/$(BITSTREAM_HW) \
 		--temp_dir $(HW_WORK_DIR) \
 		--link \
 		--target hw \
@@ -165,7 +163,7 @@ build-hw:
 build-hw-opt:
 	@echo "Building the hardware configuration..."
 	v++ \
-		-o $(BITSTREAM_OPT_DIR)/$(BITSTREAM_HW) \
+		-o $(HW_OPT_OUTPUT)/$(BITSTREAM_HW) \
 		--temp_dir $(HW_WORK_DIR_OPT) \
 		--link \
 		--target hw \
@@ -178,15 +176,17 @@ build-hw-opt:
 # Run on hardware
 run-hw:
 	@echo "Running on hardware..."
-	./$(HOST) --bitstream $(BITSTREAM_DIR)/$(BITSTREAM_HW) $(NUM)
+	./$(HOST) --bitstream $(HW_OUTPUT)/$(BITSTREAM_HW) $(NUM)
 	@echo "Hardware run complete."
 
 run-hw-opt:
 	@echo "Running on hardware..."
-	./$(HOST) --bitstream $(BITSTREAM_OPT_DIR)/$(BITSTREAM_HW) $(NUM)
+	./$(HOST) --bitstream $(HW_OPT_OUTPUT)/$(BITSTREAM_HW) $(NUM)
 	@echo "Hardware run complete."
 
 # Clean generated files
 clean:
 	@echo "Cleaning up..."
-	@rm -rf $(HOST) $(BITSTREAM_XO) $(BITSTREAM_HW) $(HW_WORK_DIR) $(WORK_DIR)
+	@rm -rf $(HOST) $(BITSTREAM_XO)
+	@rm -rf work.out $(OPT_WORK_DIR) $(HW_WORK_DIR) $(HW_OUTPUT) $(HW_WORK_DIR_OPT) $(HW_OPT_OUTPUT)
+	@rm -rf $(SIM_DIR1) $(SIM_DIR2)
