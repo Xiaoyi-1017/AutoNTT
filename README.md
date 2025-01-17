@@ -81,3 +81,9 @@ link_config.ini has been generated.
 
 ### Added
 - **gen_config.py**: generates floorplan & device configs for Rapidstream-tapaopt (stored under "all_files" folder)
+
+## Updates - 2025/01/17
+### Modified
+- **Merging folder / generate_code.py**: merged "all_files" with " templates" and modified generate_code.py accordingly
+- **Makefile**: Fixed directory problem with rapidstream-tapaopt
+
