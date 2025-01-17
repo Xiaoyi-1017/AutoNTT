@@ -21,7 +21,7 @@ OPT_WORK_DIR := ./run_optimized
 
 HW_WORK_DIR := ./_x_hw
 
-HW_WORK_DIR_OPT := ./_x_opt
+HW_OPT_WORK_DIR := ./_x_opt
 
 BITSTREAM_HW := $(APP).$(PLATFORM).hw.xclbin
 
@@ -120,7 +120,7 @@ build-opt:
 	@echo "Optimizing the design..."
 	rapidstream gen_config.py
 	rapidstream-tapaopt \
-		--work-dir $(WORK_DIR) \
+		--work-dir $(OPT_WORK_DIR) \
 		--tapa-xo-path $(BITSTREAM_XO) \
 		--device-config ./config_build/device_config.json \
 		--floorplan-config ./config_build/floorplan_config.json \
@@ -132,14 +132,14 @@ run-opt:
 	@echo "Running the optimized design..."
 	@if [ "$(SAVE_WAVEFORM)" -eq 1 ]; then \
 		./$(HOST) \
-			--bitstream "$(WORK_DIR)/dse/solution_0/updated.xo" \
+			--bitstream "$(OPT_WORK_DIR)/dse/solution_0/updated.xo" \
 			--xosim-part-num $(PART_NUM) \
 			--xosim_work_dir $(SIM_DIR2) \
 			--xosim_save_waveform \
 			$(NUM); \
 	else \
 		./$(HOST) \
-			--bitstream "$(WORK_DIR)/dse/solution_0/updated.xo" \
+			--bitstream "$(OPT_WORK_DIR)/dse/solution_0/updated.xo" \
 			--xosim-part-num $(PART_NUM) \
 			--xosim_work_dir $(SIM_DIR2) \
 			$(NUM); \
@@ -164,13 +164,13 @@ build-hw-opt:
 	@echo "Building the hardware configuration..."
 	v++ \
 		-o $(HW_OPT_OUTPUT)/$(BITSTREAM_HW) \
-		--temp_dir $(HW_WORK_DIR_OPT) \
+		--temp_dir $(HW_OPT_WORK_DIR) \
 		--link \
 		--target hw \
 		--kernel $(APP) \
 		--platform $(PLATFORM) \
 		--config link_config.ini \
-		$(WORK_DIR)/dse/solution_0/updated.xo
+		$(OPT_WORK_DIR)/dse/solution_0/updated.xo
 	@echo "Hardware configuration build complete."
 
 # Run on hardware
@@ -188,5 +188,5 @@ run-hw-opt:
 clean:
 	@echo "Cleaning up..."
 	@rm -rf $(HOST) $(BITSTREAM_XO)
-	@rm -rf work.out $(OPT_WORK_DIR) $(HW_WORK_DIR) $(HW_OUTPUT) $(HW_WORK_DIR_OPT) $(HW_OPT_OUTPUT)
+	@rm -rf work.out $(OPT_WORK_DIR) $(HW_WORK_DIR) $(HW_OUTPUT) $(HW_OPT_WORK_DIR) $(HW_OPT_OUTPUT)
 	@rm -rf $(SIM_DIR1) $(SIM_DIR2)
