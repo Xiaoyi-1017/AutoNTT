@@ -42,8 +42,10 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
     else:
         data_format = f"ap_uint<{bits}>"
 
-    template_file = "./templates/ntt.h"
-    with open(template_file, "r") as file:
+    # template_file = f"./{folder}/src/ntt.h"
+    target_file = os.path.join(folder, "./src/ntt.h")
+
+    with open(target_file, "r") as file:
         header_content = file.read()
 
     header_content = header_content.replace("{DATA_FORMAT}", data_format)
@@ -55,11 +57,11 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
     header_content = header_content.replace("{NUM_CH}", str(NUM_CH))
     header_content = header_content.replace("{TW_FACTORS}", ', '.join(map(str, tw_factors)))
 
-    output_file = os.path.join(folder, "./src/ntt.h")
-    with open(output_file, "w") as file:
+    # output_file = os.path.join(folder, "./src/ntt.h")
+    with open(target_file, "w") as file:
         file.write(header_content)
 
-    print(f"{output_file} has been generated.")
+    print(f"{target_file} has been generated.")
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate the number of NTT cores.")
@@ -91,7 +93,7 @@ def main():
             os.makedirs(folder_name)
 
         # Copy all existing files to the new folder
-        source_folder = "./all_files"
+        source_folder = "./templates"
         if os.path.exists(source_folder):
             for item in os.listdir(source_folder):
                 s = os.path.join(source_folder, item)
