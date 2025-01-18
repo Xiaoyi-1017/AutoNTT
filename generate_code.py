@@ -97,29 +97,32 @@ def main():
     if is_memory_config_realizable(NUM_CH, veclen, 2*B):
         NUM_NTT_CORES = NUM_CH * veclen // (2 * B)
 
-        print(f"Values used -> N: {N}, B: {B}, NUM_CH: {NUM_CH}, veclen: {veclen}")
+        print(f"Values used -> N: {N}, q: {mod}, bits: {bits}, B: {B}, NUM_CH: {NUM_CH}, veclen: {veclen}")
         print(f"Number of NTT cores: {NUM_NTT_CORES}")
 
         # Create new folder
         folder_name = f"N_{N}_B_{B}_CH_{NUM_CH}"
-        if not os.path.exists(folder_name):
+        if os.path.exists(folder_name):
+            print(f"Folder exists: {folder_name}. No folder created.")
+        else:
+            print(f"Creating a new folder: {folder_name}")
             os.makedirs(folder_name)
 
-        # Copy all existing files to the new folder
-        source_folder = "./templates"
-        if os.path.exists(source_folder):
-            for item in os.listdir(source_folder):
-                s = os.path.join(source_folder, item)
-                d = os.path.join(folder_name, item)
-                if os.path.isdir(s):
-                    shutil.copytree(s, d, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(s, d)
+            # Copy all existing files to the new folder
+            source_folder = "./templates"
+            if os.path.exists(source_folder):
+                for item in os.listdir(source_folder):
+                    s = os.path.join(source_folder, item)
+                    d = os.path.join(folder_name, item)
+                    if os.path.isdir(s):
+                        shutil.copytree(s, d, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(s, d)
 
-        # Generate new files in the folder
-        generate_ini(NUM_CH, folder_name)
-        generate_header(N, mod, bits, B, NUM_CH, folder_name)
-        generate_makefile(NUM_CH, folder_name)
+            # Generate new files in the folder
+            generate_ini(NUM_CH, folder_name)
+            generate_header(N, mod, bits, B, NUM_CH, folder_name)
+            generate_makefile(NUM_CH, folder_name)
 
     else:
         print(f"NUM_NTT_CORES is not feasible.")

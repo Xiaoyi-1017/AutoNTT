@@ -13,13 +13,13 @@ PART_NUM := xcu280-fsvh2892-2L-e
 CLOCK_PERIOD := 3.33
 PLATFORM := xilinx_u280_gen3x16_xdma_1_202211_1
 
-BITSTREAM_XO := $(APP).xo
 SIM_DIR1 := ./before_optimized
 SIM_DIR2 := ./after_optimized
 OPT_DIR := ./opt
 OPT_WORK_DIR := ./_x_opt
 HW_WORK_DIR := ./_x_hw
 
+BITSTREAM_XO := $(APP).xo
 BITSTREAM_HW := $(APP).$(PLATFORM).hw.xclbin
 
 HW_OUTPUT := ./hw_original
@@ -188,6 +188,8 @@ run-hw-opt:
 # Clean generated files
 clean:
 	@echo "Cleaning up..."
-	@rm -rf $(HOST) $(BITSTREAM_XO)
-	@rm -rf work.out $(OPT_DIR) $(HW_WORK_DIR) $(HW_OUTPUT) $(OPT_WORK_DIR) $(HW_OPT_OUTPUT)
+	@rm -f $(HOST) $(BITSTREAM_XO)
+	@rm -rf work.out .ipcache .Xil $(OPT_DIR) $(HW_WORK_DIR) $(HW_OUTPUT) $(OPT_WORK_DIR) $(HW_OPT_OUTPUT)
 	@rm -rf $(SIM_DIR1) $(SIM_DIR2)
+	@rm -f v++*.log xcd.log gurobi.log
+	@echo "Clean up complete."
