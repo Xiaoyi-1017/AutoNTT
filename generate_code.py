@@ -43,7 +43,7 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
         data_format = f"ap_uint<{bits}>"
 
     # template_file = f"./{folder}/src/ntt.h"
-    target_file = os.path.join(folder, "./src/ntt.h")
+    target_file = os.path.join(folder, "src/ntt.h")
 
     with open(target_file, "r") as file:
         header_content = file.read()
@@ -62,6 +62,19 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
         file.write(header_content)
 
     print(f"{target_file} has been generated.")
+
+def generate_makefile(NUM_CH, folder):
+    template_file = "./templates/Makefile"
+    with open(template_file, "r") as file:
+        content = file.read()
+
+    content = content.replace("{NUM_CH}", str(NUM_CH))
+
+    output_file = os.path.join(folder, "Makefile")
+    with open(output_file, "w") as file:
+        file.write(content)
+
+    print(f"{output_file} has been generated.")
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate the number of NTT cores.")
@@ -106,6 +119,7 @@ def main():
         # Generate new files in the folder
         generate_ini(NUM_CH, folder_name)
         generate_header(N, mod, bits, B, NUM_CH, folder_name)
+        generate_makefile(NUM_CH, folder_name)
 
     else:
         print(f"NUM_NTT_CORES is not feasible.")
