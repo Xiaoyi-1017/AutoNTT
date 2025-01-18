@@ -7,36 +7,11 @@ AMD Vitis (2022.2) - https://www.amd.com/en/products/software/adaptive-socs-and-
 
 TAPA - https://tapa.readthedocs.io/en/main/
 
-Rapidstream (Not used) - https://docs.rapidstream-da.com/
+Rapidstream (recommended) - https://docs.rapidstream-da.com/
 
 ### Install Python Requirements
 ```bash
 pip install -r requirements.txt 
-```
-
-## How to use MAKEFILE
-Actions (TARGET = sw, xo, hw)
-1) all: Host compilation [tapa g++] / Synthesis into RTL [tapa compile] / Bitstream generation [v++]
-2) run: sw simulation / RTL simulation / onboard
-
-
-HOST Compilation
-```bash
-make all TARGET=sw
-```
-Synthesis into RTL
-```bash
-make all TARGET=xo
-```
-
-Bitstream generation
-```bash
-make all TARGET=hw
-```
-
-Simulation / Onboard verification (NUM = number of samples)
-```bash
-make run TARGET=(sw / xo / hw)  NUM=10000
 ```
 
 ## How to use generate_code.py
@@ -72,18 +47,54 @@ link_config.ini has been generated.
 ./src/ntt.cpp has been generated. 
 ```
 
+## How to use MAKEFILE
+Actions (TARGET = sw, xo, hw)
+1) all: Host compilation [tapa g++] / Synthesis into RTL [tapa compile] / Bitstream generation [v++]
+2) run: sw simulation / RTL simulation / onboard
 
-## Updates - 2025/01/10
-### Modified
+
+HOST Compilation
+```bash
+make all TARGET=sw
+```
+Synthesis into RTL
+```bash
+make all TARGET=xo
+```
+
+Optimize with Rapidstream (recommended)
+```bash
+make all TARGET=opt
+```
+
+Bitstream generation 
+- w/o Rapidstream
+```bash
+make all TARGET=hw
+```
+- w/ Rapidstream
+```bash
+make all TARGET=hw-opt
+```
+
+Simulation / Onboard verification (NUM = number of samples)
+```bash
+make run TARGET=(sw / xo / hw)  NUM=10000
+```
+
+## Updates
+### 2025/01/10
+#### Modified
 - **ntt.cpp**: implemented input_stage and temporal_stage differently so that it does not require further modification
 - **host.cpp**: implemented input & output processing that supports B less than 8 (multiple samples in the same channel)
 - **generate_code.py**: creates folder containing necessary files (src, Makefile, link_config.ini) for different configurations 
 
-### Added
+#### Added
 - **gen_config.py**: generates floorplan & device configs for Rapidstream-tapaopt (stored under "all_files" folder)
 
-## Updates - 2025/01/17
-### Modified
+### 2025/01/17 & 2025/01/18
+#### Modified
 - **Merging folder / generate_code.py**: merged "all_files" with " templates" and modified generate_code.py accordingly
-- **Makefile**: Fixed directory problem with rapidstream-tapaopt
+- **gen_config.py**: Fixed port_pre_assignments
+- **Makefile**: Rearranged directories for rapidstream-tapaopt
 
