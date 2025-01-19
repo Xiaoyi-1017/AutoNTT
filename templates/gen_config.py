@@ -29,11 +29,12 @@ def gen_config(num_ch: int) -> None:
     }
     for i in range(num_ch):
         if i < 8:
-            port_pre_assignments[f".*x_{i}_.*"] = "SLOT_X0Y0:SLOT_X1Y2"
-            port_pre_assignments[f".*y_{i}_.*"] = "SLOT_X0Y0:SLOT_X1Y2"
+            port_pre_assignments[f".*m_axi_x_{i}_.*"] = "SLOT_X0Y0:SLOT_X0Y0"
+            port_pre_assignments[f".*m_axi_y_{i}_.*"] = "SLOT_X0Y0:SLOT_X0Y0"
         else:
-            port_pre_assignments[f".*x_{i}_.*"] = "SLOT_X0Y0:SLOT_X1Y2"
-            port_pre_assignments[f".*y_{i}_.*"] = "SLOT_X0Y0:SLOT_X1Y2"
+            port_pre_assignments[f".*m_axi_x_{i}_.*"] = "SLOT_X1Y0:SLOT_X1Y0"
+            port_pre_assignments[f".*m_axi_y_{i}_.*"] = "SLOT_X1Y0:SLOT_X1Y0"
+
 
     floorplan_config = FloorplanConfig(
         port_pre_assignments=port_pre_assignments,
