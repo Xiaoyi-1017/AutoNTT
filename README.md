@@ -57,29 +57,21 @@ HOST Compilation
 ```bash
 make all TARGET=sw
 ```
-Synthesis into RTL
+Synthesize and generate xo file
 ```bash
 make all TARGET=xo
 ```
-
-Optimize with Rapidstream (recommended)
-```bash
-make all TARGET=opt
-```
-
-Bitstream generation 
-- w/o Rapidstream
+Generate bitstream from xo file (no Rapidstream)
 ```bash
 make all TARGET=hw
 ```
-- w/ Rapidstream
+Optimize xo file with Rapidstream and generate bitstream (recommended)
 ```bash
 make all TARGET=hw-opt
 ```
-
 Simulation / Onboard verification (NUM = number of samples)
 ```bash
-make run TARGET=(sw / xo / hw)  NUM=10000
+make run TARGET=(sw / xo / hw / hw-opt)  NUM=10000
 ```
 
 ## Updates

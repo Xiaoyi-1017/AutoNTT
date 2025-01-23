@@ -13,20 +13,28 @@ def generate_ini(num_ch, folder):
         raise ValueError("NUM_CH must be between 1 and 16.")
 
     lines = ["[connectivity]"]
+    lines_1 = ["[connectivity]"]
 
     for i in range(num_ch):
-        lines.append(f"sp=ntt_1.x_{i}:HBM[{i}]")
+        lines.append(f"sp=ntt.x_{i}:HBM[{i}]")
+        lines_1.append(f"sp=ntt_1.x_{i}:HBM[{i}]")
 
     offset = num_ch
 
     for i in range(num_ch):
-        lines.append(f"sp=ntt_1.y_{i}:HBM[{i + offset}]")
+        lines.append(f"sp=ntt.y_{i}:HBM[{i + offset}]")
+        lines_1.append(f"sp=ntt_1.y_{i}:HBM[{i + offset}]")
 
     filename = os.path.join(folder, "link_config.ini")
     with open(filename, "w") as file:
         file.write("\n".join(lines))
 
-    print(f"{filename} has been generated.")
+    #print(f"{filename} has been generated.")
+
+    filename_1 = os.path.join(folder, "link_config_1.ini")
+    with open(filename_1, "w") as file_1:
+        file_1.write("\n".join(lines_1))
+
 
 def generate_header(n, mod, bits, B, NUM_CH, folder):
     log2N = int(math.log2(n))
@@ -61,7 +69,7 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
     with open(target_file, "w") as file:
         file.write(header_content)
 
-    print(f"{target_file} has been generated.")
+    #print(f"{target_file} has been generated.")
 
 def generate_makefile(NUM_CH, folder):
     template_file = "./templates/Makefile"
@@ -74,7 +82,7 @@ def generate_makefile(NUM_CH, folder):
     with open(output_file, "w") as file:
         file.write(content)
 
-    print(f"{output_file} has been generated.")
+    #print(f"{output_file} has been generated.")
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate the number of NTT cores.")
