@@ -3,11 +3,11 @@ Code generator for NTT accelerator
 
 ### Prerequisites
 
-AMD Vitis (2022.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
+AMD Vitis (2023.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
 
-TAPA - https://tapa.readthedocs.io/en/main/
+TAPA (0.1.20250126) - https://tapa.readthedocs.io/en/main/
 
-Rapidstream (recommended) - https://docs.rapidstream-da.com/
+Rapidstream (2025.1.0109, recommended) - https://docs.rapidstream-da.com/
 
 ### Install Python Requirements
 ```bash

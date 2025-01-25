@@ -37,6 +37,10 @@ def generate_ini(num_ch, folder):
 
 
 def generate_header(n, mod, bits, B, NUM_CH, folder):
+    WIDTH = 2*B
+    DEPTH = n / WIDTH
+    logDEPTH = int(math.log2(DEPTH))
+
     log2N = int(math.log2(n))
     log2B = int(math.log2(B))
 
@@ -62,6 +66,7 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
     header_content = header_content.replace("{log2N}", str(log2N))
     header_content = header_content.replace("{B}", str(B))
     header_content = header_content.replace("{log2B}", str(log2B))
+    header_content = header_content.replace("{logDEPTH}", str(logDEPTH))
     header_content = header_content.replace("{NUM_CH}", str(NUM_CH))
     header_content = header_content.replace("{TW_FACTORS}", ', '.join(map(str, tw_factors)))
 

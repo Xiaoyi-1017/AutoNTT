@@ -11,10 +11,12 @@ import argparse
 #from rapidstream.assets.device_library.u280.u280 import get_u280_precollected_device
 from rapidstream import get_u280_vitis_device_factory, RapidStreamTAPA
 from rapidstream.assets.floorplan.floorplan_config import FloorplanConfig
+from rapidstream import PipelineConfig
 
 CONFIG_DIR = Path("config_build")
 FLOOR_PLAN_CONFIG = CONFIG_DIR / "floorplan_config.json"
 DEVICE_CONFIG = CONFIG_DIR / "device_config.json"
+PIPELINE_CONFIG = CONFIG_DIR / "pipeline_config.json"
 VITIS_PLATFORM = "xilinx_u280_gen3x16_xdma_1_202211_1"
 
 def gen_config(num_ch: int) -> None:
@@ -56,6 +58,11 @@ def gen_config(num_ch: int) -> None:
     factory.generate_virtual_device(Path(DEVICE_CONFIG))
 
     #get_u280_precollected_device(DEVICE_CONFIG)
+
+    config = PipelineConfig(
+        pp_scheme="single",
+    )
+    config.save_to_file(Path(PIPELINE_CONFIG))
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ const int log2B = {log2B};
 // WIDTH: number of coeffs processed in parallel (per NTT CORE)
 const int WIDTH = 2*B;
 const int DEPTH = n / WIDTH;
+const int logDEPTH = {logDEPTH};
 
 const int spatial_stages = log2B + 1;
 const int temporal_stages = log2N - (log2B + 1);

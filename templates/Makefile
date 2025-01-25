@@ -115,6 +115,7 @@ build-xo-opt:
 		--work-dir $(OPT_DIR) \
 		--tapa-xo-path $(XO_FILE) \
 		--device-config $(CONFIG_BUILD_DIR)/device_config.json \
+		--pipeline-config $(CONFIG_BUILD_DIR)/pipeline_config.json \
 		--floorplan-config $(CONFIG_BUILD_DIR)/floorplan_config.json \
 		--connectivity-ini ./link_config_1.ini
 	@echo "Optimization complete."
@@ -129,6 +130,7 @@ build-hw-opt:
 		--work-dir $(OPT_DIR) \
 		--tapa-xo-path $(XO_FILE) \
 		--device-config $(CONFIG_BUILD_DIR)/device_config.json \
+		--pipeline-config $(CONFIG_BUILD_DIR)/pipeline_config.json \
 		--floorplan-config $(CONFIG_BUILD_DIR)/floorplan_config.json \
 		--implementation-config ./impl_config.json \
 		--connectivity-ini ./link_config.ini \
