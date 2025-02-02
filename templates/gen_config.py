@@ -61,6 +61,9 @@ def gen_config(num_ch: int) -> None:
 
     config = PipelineConfig(
         pp_scheme="single",
+        pipeline_data_of_intra_slot_fifo="false",
+        max_seconds="60",
+        max_workers="1",
     )
     config.save_to_file(Path(PIPELINE_CONFIG))
 

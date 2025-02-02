@@ -134,8 +134,15 @@ build-hw-opt:
 		--floorplan-config $(CONFIG_BUILD_DIR)/floorplan_config.json \
 		--implementation-config ./impl_config.json \
 		--connectivity-ini ./link_config.ini \
-		--run-impl
-	@echo "Optimization complete."
+		--run-impl || true
+	@echo "Searching generated bitstreams"
+	@for i in 0 1 2 3 4; do \
+		if [ -f "$(OPT_DIR)/dse/solution_$${i}/vitis_run_hw/$(BITSTREAM_HW_OPT)" ]; then \
+			cp "$(OPT_DIR)/dse/solution_$${i}/vitis_run_hw/$(BITSTREAM_HW_OPT)" "$(OPT_DIR)/$(BITSTREAM_HW_OPT)"; \
+			echo "Bitstream found: solution_$${i}. Copying to $(OPT_DIR)/$(BITSTREAM_HW_OPT)."; \
+			break; \
+		fi; \
+	done
 
 # Run optimized design
 run-xo-opt:
@@ -191,7 +198,7 @@ run-hw:
 
 run-hw-opt:
 	@echo "Running on hardware..."
-	./$(HOST) --bitstream $(OPT_DIR)/dse/solution_0/vitis_run_hw/$(BITSTREAM_HW_OPT) $(NUM)
+	./$(HOST) --bitstream $(OPT_DIR)/$(BITSTREAM_HW_OPT) $(NUM)
 	@echo "Hardware run complete."
 
 run-hw-opt-old:
@@ -211,7 +218,7 @@ help:
 	@echo "        hw-opt  - Optimize with Rapidstream and build FPGA bitstream"
 	@echo ""
 	@echo "  Run Commands:"
-	@echo "    make run TARGET=<type> <sample_num>  # Run with the TARGET for specified number of samples"
+	@echo "    make run TARGET=<type> NUM=<sample_num>  # Run with the TARGET for specified number of samples"
 	@echo "      Valid TARGET values:"
 	@echo "        sw      - Run software simulation"
 	@echo "        xo      - Simulate with the XO file"
@@ -225,5 +232,5 @@ clean:
 	@rm -f $(HOST) $(XO_FILE)
 	@rm -rf work.out .ipcache .Xil $(OPT_DIR) $(HW_WORK_DIR) $(HW_OUTPUT) $(OPT_WORK_DIR) $(HW_OPT_OUTPUT)
 	@rm -rf $(SIM_XO_DIR) $(SIM_XO_OPT_DIR)
-	@rm -f v++*.log xcd.log gurobi.log
+	@rm -f v++*.log xcd.log gurobi.log vivado.log vivado.jou
 	@echo "Clean up complete."

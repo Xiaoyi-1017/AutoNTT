@@ -1,5 +1,4 @@
 {
-    "max_workers": 1,
     "port_to_clock_period": {
         "ap_clk": 3.33
     },

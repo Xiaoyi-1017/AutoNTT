@@ -44,6 +44,12 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
     log2N = int(math.log2(n))
     log2B = int(math.log2(B))
 
+    MCH = int((2*B) > 64 / (bits/8))
+    DATA_BSIZE = int(bits/8)
+    kVecLen = int(64 / DATA_BSIZE)
+    GROUP_NUM = int(min(NUM_CH, NUM_CH * kVecLen / (2*B)))
+    GROUP_CH_NUM = int(NUM_CH / GROUP_NUM)
+
     omega, psi = get_nth_root_of_unity_and_psi(n, mod)
 
     tw_factors = twiddle_generator_BR(mod, psi, n)
@@ -68,6 +74,10 @@ def generate_header(n, mod, bits, B, NUM_CH, folder):
     header_content = header_content.replace("{log2B}", str(log2B))
     header_content = header_content.replace("{logDEPTH}", str(logDEPTH))
     header_content = header_content.replace("{NUM_CH}", str(NUM_CH))
+    header_content = header_content.replace("{MCH}", str(MCH))
+    header_content = header_content.replace("{DATA_BSIZE}", str(DATA_BSIZE))
+    header_content = header_content.replace("{GROUP_NUM}", str(GROUP_NUM))
+    header_content = header_content.replace("{GROUP_CH_NUM}", str(GROUP_CH_NUM))
     header_content = header_content.replace("{TW_FACTORS}", ', '.join(map(str, tw_factors)))
 
     # output_file = os.path.join(folder, "./src/ntt.h")

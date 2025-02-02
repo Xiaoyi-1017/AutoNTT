@@ -5,7 +5,7 @@ Code generator for NTT accelerator
 
 AMD Vitis (2023.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
 
-TAPA (0.1.20250126) - https://tapa.readthedocs.io/en/main/
+TAPA (0.1.20250127) - https://tapa.readthedocs.io/en/main/
 
 Rapidstream (2025.1.0109, recommended) - https://docs.rapidstream-da.com/
 
@@ -16,35 +16,27 @@ pip install -r requirements.txt
 
 ## How to use generate_code.py
 
-Checking if B (number of butterfly units per NTT CORE) and NUM_CH (Number of memory channels) are compatible
+Please use this code to automatically generate an NTT project.
+
+Arguments
+- **N**: Transform size, polynomial degree
+- **q**: Prime modulus (i.e. 12289)
+- **bits**: Bit length of coefficients
+- **B**: Number of butterfly units in parallel (per stage)
+- **NUM_CH**: Number of HBM channels input (Total of 2*NUM_CH channels are used for input & output)
 
 Condition: NUM_CH * VECLEN / number of coefficients in parallel -> Integer
 
-Arguments
-- **N**: transform size, polynomial degree
-- **q**: prime modulus (i.e. 12289)
-- **bits**: bit length of coefficients
-- **B**: number of butterfly units in parallel (per stage)
-- **NUM_CH**: number of memory banks used for input
-
-
-
-FULL CODE (DEFAULT)
+Command: (with default values)
 ```bash
 ./generate_code.py -N 1024 -q 12289 -bits 32 -B 8 -NUM_CH 4 
 ```
-Example 1: B = 16, NUM_CH = 2
+
+Terminal output:
 ```bash
-./generate_code.py -B 16 -NUM_CH 2 
-```
-Terminal output
-```bash
-Values used -> N: 1024, B: 8, NUM_CH: 4, veclen: 16
-Number of NTT cores: 4 
-number of channels per ntt_core: 1
-link_config.ini has been generated.
-./src/ntt.h has been generated.
-./src/ntt.cpp has been generated. 
+Values used -> N: 1024, q: 12289, bits: 32, B: 8, NUM_CH: 4, veclen: 16
+Number of NTT cores: 4
+Creating a new folder: N_1024_B_8_CH_4
 ```
 
 ## How to use MAKEFILE
