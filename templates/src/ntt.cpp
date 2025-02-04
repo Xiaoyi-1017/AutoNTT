@@ -66,7 +66,7 @@ BF_LOOP:
 			even = input0.read();
 			odd = input1.read();
 
-			int tw_idx = (read_i*B)/stride +  n/(2 * stride);
+			int tw_idx = (read_i*BU)/stride +  n/(2 * stride);
 
 			butterfly(even, odd,  tw_factors[tw_idx], &out_even, &out_odd);
 
@@ -189,21 +189,21 @@ MEM_STAGE_LOOP:
 	}
 }
 
-void temporal_stage(int stage, tapa::istreams<Data, B>& input_stream0, tapa::istreams<Data, B>& input_stream1,
-		tapa::ostreams<Data, B>& output_stream0, tapa::ostreams<Data, B>& output_stream1, int SAMPLES){
+void temporal_stage(int stage, tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
+		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1, int SAMPLES){
 
-	tapa::streams<Data, B> inter_streams0;
-	tapa::streams<Data, B> inter_streams1;
+	tapa::streams<Data, BU> inter_streams0;
+	tapa::streams<Data, BU> inter_streams1;
 
 	tapa::task()
-		.invoke<tapa::detach, B>(bf_unit, tapa::seq(), stage, input_stream0, input_stream1, inter_streams0, inter_streams1, SAMPLES)
-		.invoke<tapa::detach, B>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1, SAMPLES);
+		.invoke<tapa::detach, BU>(bf_unit, tapa::seq(), stage, input_stream0, input_stream1, inter_streams0, inter_streams1, SAMPLES)
+		.invoke<tapa::detach, BU>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1, SAMPLES);
 }
 
-void spatial_stages(tapa::istreams<Data, B>& input_stream0, tapa::istreams<Data, B>& input_stream1,
-		tapa::ostreams<Data, B>& output_stream0, tapa::ostreams<Data, B>& output_stream1, int SAMPLES){
+void spatial_stages(tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
+		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1, int SAMPLES){
 
-	const int num_of_stages = log2B + 1;
+	const int num_of_stages = log2BU + 1;
 	int mem[num_of_stages+1][WIDTH];
 	ap_uint<logDEPTH> i = 0;
 
@@ -211,7 +211,7 @@ NTT_SPATIAL_LOOP:
 	for(;;){
 #pragma HLS PIPELINE II = 1
 		bool do_read = 1;
-		for(int j = 0; j < B; j++){
+		for(int j = 0; j < BU; j++){
 #pragma HLS UNROLL
 			do_read &= !input_stream0[j].empty() & !input_stream1[j].empty();
 		}
@@ -219,7 +219,7 @@ NTT_SPATIAL_LOOP:
 		//for(int i = 0; i < DEPTH; i++){
 		if( do_read == true ){
 INPUT_LOOP:
-			for(int j = 0; j < B; j++){
+			for(int j = 0; j < BU; j++){
 #pragma HLS UNROLL
 				mem[0][2*j] = input_stream0[j].read();
 				mem[0][2*j+1] = input_stream1[j].read();
@@ -229,7 +229,7 @@ STAGE_LOOP:
 			for(int s = 0; s < num_of_stages; s++){
 #pragma HLS unroll 
 
-				int current_stage = s + log2N - log2B -1;
+				int current_stage = s + log2N - log2BU -1;
 				int stride = n >> ((current_stage) + 1);
 				int next_stride = stride >> 1;
 
@@ -241,14 +241,14 @@ STAGE_LOOP:
 				int next_mask = ( 1 << (shift-1) ) -1;
 
 BUTTERFLY_LOOP:
-				for(int idx = 0; idx < B; idx++){
+				for(int idx = 0; idx < BU; idx++){
 #pragma HLS unroll
 					int out_even; int out_odd;
 
 					int j = idx >> shift;
 					int k = idx & mask;
 
-					int tw_idx = (i*B+idx)/stride + n / (2 * stride);
+					int tw_idx = (i*BU+idx)/stride + n / (2 * stride);
 
 					int ind_even = (next_stride == 0) ? ( j << (shift+1) ) 
 						: ( j << (shift+1) ) + (k & next_mask) * 2 + (k >> (shift-1));
@@ -261,7 +261,7 @@ BUTTERFLY_LOOP:
 			}
 
 OUTPUT_LOOP:
-			for(int j = 0; j < B; j++){
+			for(int j = 0; j < BU; j++){
 #pragma HLS UNROLL
 				output_stream0[j] << mem[num_of_stages][2*j];
 				output_stream1[j] << mem[num_of_stages][2*j+1];
@@ -368,11 +368,11 @@ INPUT_MEM_STAGE_LOOP:
 	}
 }
 
-void input_mem_stage(tapa::istreams<Data, B>& x_0, tapa::istreams<Data, B>& x_1,
-		tapa::ostreams<Data, B>& y_0, tapa::ostreams<Data, B>& y_1, int SAMPLES){
+void input_mem_stage(tapa::istreams<Data, BU>& x_0, tapa::istreams<Data, BU>& x_1,
+		tapa::ostreams<Data, BU>& y_0, tapa::ostreams<Data, BU>& y_1, int SAMPLES){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(input_mem_stage_int, tapa::seq(), x_0, x_1, y_0, y_1, SAMPLES);
+		.invoke<tapa::detach, BU>(input_mem_stage_int, tapa::seq(), x_0, x_1, y_0, y_1, SAMPLES);
 }
 
 
@@ -380,9 +380,9 @@ void input_mem_stage(tapa::istreams<Data, B>& x_0, tapa::istreams<Data, B>& x_1,
 
 #ifdef MCH
 
-void read_dram_m(tapa::mmap<bits<DataVec>> x, tapa::ostreams<Data, 2*B> & dramrd_streams, int sample_num){
+void read_dram_m(tapa::mmap<bits<DataVec>> x, tapa::ostreams<Data, 2*BU> & dramrd_streams, int sample_num){
 
-	for(int sample = 0; sample < sample_num/NUM_CH; sample++){
+	for(int sample = 0; sample < sample_num/CH; sample++){
         	for(int i = 0; i < n/kVecLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/kVecLen) + i] ); 
@@ -399,7 +399,7 @@ void read_collect_2_core_m(tapa::istream<Data> & dramrd_streams0, tapa::istream<
 READ_COLLECT_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
-			for(int i = 0; i < n/(2*B); i++){
+			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
 				Data data;
 				if( ch == 0 ){
@@ -420,7 +420,7 @@ void read_collect_4_core_m(tapa::istream<Data> & dramrd_streams0, tapa::istream<
 READ_COLLECT_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
-			for(int i = 0; i < n/(2*B); i++){
+			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
 				Data data;
 				if( ch == 0 ){
@@ -447,7 +447,7 @@ void read_collect_8_core_m(tapa::istream<Data> & dramrd_streams0, tapa::istream<
 READ_COLLECT_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
-			for(int i = 0; i < n/(2*B); i++){
+			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
 				Data data;
 				if( ch == 0 ){
@@ -481,31 +481,31 @@ READ_COLLECT_LOOP:
 	}
 }
 
-void read_collect_2_m(tapa::istreams<Data, 2*B> & dramrd_streams0, tapa::istreams<Data, 2*B> & dramrd_streams1, tapa::ostreams<Data, B> & core_istreams_e, tapa::ostreams<Data, B> & core_istreams_o ){
+void read_collect_2_m(tapa::istreams<Data, 2*BU> & dramrd_streams0, tapa::istreams<Data, 2*BU> & dramrd_streams1, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(read_collect_2_core_m, dramrd_streams0, dramrd_streams1, core_istreams_e)
-		.invoke<tapa::detach, B>(read_collect_2_core_m, dramrd_streams0, dramrd_streams1, core_istreams_o)
+		.invoke<tapa::detach, BU>(read_collect_2_core_m, dramrd_streams0, dramrd_streams1, core_istreams_e)
+		.invoke<tapa::detach, BU>(read_collect_2_core_m, dramrd_streams0, dramrd_streams1, core_istreams_o)
 	;
 }
 
-void read_collect_4_m(tapa::istreams<Data, 2*B> & dramrd_streams0, tapa::istreams<Data, 2*B> & dramrd_streams1, tapa::istreams<Data, 2*B> & dramrd_streams2, tapa::istreams<Data, 2*B> & dramrd_streams3, tapa::ostreams<Data, B> & core_istreams_e, tapa::ostreams<Data, B> & core_istreams_o ){
+void read_collect_4_m(tapa::istreams<Data, 2*BU> & dramrd_streams0, tapa::istreams<Data, 2*BU> & dramrd_streams1, tapa::istreams<Data, 2*BU> & dramrd_streams2, tapa::istreams<Data, 2*BU> & dramrd_streams3, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(read_collect_4_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, core_istreams_e)
-		.invoke<tapa::detach, B>(read_collect_4_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, core_istreams_o)
+		.invoke<tapa::detach, BU>(read_collect_4_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, core_istreams_e)
+		.invoke<tapa::detach, BU>(read_collect_4_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, core_istreams_o)
 	;
 }
 
-void read_collect_8_m(tapa::istreams<Data, 2*B> & dramrd_streams0, tapa::istreams<Data, 2*B> & dramrd_streams1, tapa::istreams<Data, 2*B> & dramrd_streams2, tapa::istreams<Data, 2*B> & dramrd_streams3, tapa::istreams<Data, 2*B> & dramrd_streams4, tapa::istreams<Data, 2*B> & dramrd_streams5, tapa::istreams<Data, 2*B> & dramrd_streams6, tapa::istreams<Data, 2*B> & dramrd_streams7, tapa::ostreams<Data, B> & core_istreams_e, tapa::ostreams<Data, B> & core_istreams_o ){
+void read_collect_8_m(tapa::istreams<Data, 2*BU> & dramrd_streams0, tapa::istreams<Data, 2*BU> & dramrd_streams1, tapa::istreams<Data, 2*BU> & dramrd_streams2, tapa::istreams<Data, 2*BU> & dramrd_streams3, tapa::istreams<Data, 2*BU> & dramrd_streams4, tapa::istreams<Data, 2*BU> & dramrd_streams5, tapa::istreams<Data, 2*BU> & dramrd_streams6, tapa::istreams<Data, 2*BU> & dramrd_streams7, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(read_collect_8_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, dramrd_streams4, dramrd_streams5, dramrd_streams6, dramrd_streams7, core_istreams_e)
-		.invoke<tapa::detach, B>(read_collect_8_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, dramrd_streams4, dramrd_streams5, dramrd_streams6, dramrd_streams7, core_istreams_o)
+		.invoke<tapa::detach, BU>(read_collect_8_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, dramrd_streams4, dramrd_streams5, dramrd_streams6, dramrd_streams7, core_istreams_e)
+		.invoke<tapa::detach, BU>(read_collect_8_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, dramrd_streams4, dramrd_streams5, dramrd_streams6, dramrd_streams7, core_istreams_o)
 	;
 }
 
-void read_collect_m(tapa::istreams<Data, 2*B*GROUP_CH_NUM> & dramrd_streams, tapa::ostreams<Data, B> & core_istreams_e, tapa::ostreams<Data, B> & core_istreams_o ){
+void read_collect_m(tapa::istreams<Data, 2*BU*GROUP_CH_NUM> & dramrd_streams, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
 
 	tapa::task()
 #if GROUP_CH_NUM == 2
@@ -523,7 +523,7 @@ void write_dist_2_core_m(tapa::ostream<Data> & dramwr_streams0, tapa::ostream<Da
 WRITE_DIST_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
-			for(int i = 0; i < n/(2*B); i++){
+			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
 				Data data = core_ostream.read();
 				if( ch == 0 ){
@@ -542,7 +542,7 @@ void write_dist_4_core_m(tapa::ostream<Data> & dramwr_streams0, tapa::ostream<Da
 WRITE_DIST_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
-			for(int i = 0; i < n/(2*B); i++){
+			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
 				Data data = core_ostream.read();
 				if( ch == 0 ){
@@ -567,7 +567,7 @@ void write_dist_8_core_m(tapa::ostream<Data> & dramwr_streams0, tapa::ostream<Da
 WRITE_DIST_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
-			for(int i = 0; i < n/(2*B); i++){
+			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
 				Data data = core_ostream.read();
 				if( ch == 0 ){
@@ -607,10 +607,10 @@ void write_dist_2_int_m(tapa::ostreams<Data, 2> & dramwr_streams0, tapa::ostream
 	;
 }
 
-void write_dist_2_m(tapa::ostreams<Data, 2*B> & dramwr_streams0, tapa::ostreams<Data, 2*B> & dramwr_streams1, tapa::istreams<Data, B> & core_ostreams_e, tapa::istreams<Data, B> & core_ostreams_o ){
+void write_dist_2_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(write_dist_2_int_m, dramwr_streams0, dramwr_streams1, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, BU>(write_dist_2_int_m, dramwr_streams0, dramwr_streams1, core_ostreams_e, core_ostreams_o)
 	;
 }
 
@@ -622,10 +622,10 @@ void write_dist_4_int_m(tapa::ostreams<Data, 2> & dramwr_streams0, tapa::ostream
 	;
 }
 
-void write_dist_4_m(tapa::ostreams<Data, 2*B> & dramwr_streams0, tapa::ostreams<Data, 2*B> & dramwr_streams1, tapa::ostreams<Data, 2*B> & dramwr_streams2, tapa::ostreams<Data, 2*B> & dramwr_streams3, tapa::istreams<Data, B> & core_ostreams_e, tapa::istreams<Data, B> & core_ostreams_o ){
+void write_dist_4_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::ostreams<Data, 2*BU> & dramwr_streams2, tapa::ostreams<Data, 2*BU> & dramwr_streams3, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(write_dist_4_int_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, BU>(write_dist_4_int_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, core_ostreams_e, core_ostreams_o)
 	;
 }
 
@@ -637,15 +637,15 @@ void write_dist_8_int_m(tapa::ostreams<Data, 2> & dramwr_streams0, tapa::ostream
 	;
 }
 
-void write_dist_8_m(tapa::ostreams<Data, 2*B> & dramwr_streams0, tapa::ostreams<Data, 2*B> & dramwr_streams1, tapa::ostreams<Data, 2*B> & dramwr_streams2, tapa::ostreams<Data, 2*B> & dramwr_streams3, tapa::ostreams<Data, 2*B> & dramwr_streams4, tapa::ostreams<Data, 2*B> & dramwr_streams5, tapa::ostreams<Data, 2*B> & dramwr_streams6, tapa::ostreams<Data, 2*B> & dramwr_streams7, tapa::istreams<Data, B> & core_ostreams_e, tapa::istreams<Data, B> & core_ostreams_o ){
+void write_dist_8_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::ostreams<Data, 2*BU> & dramwr_streams2, tapa::ostreams<Data, 2*BU> & dramwr_streams3, tapa::ostreams<Data, 2*BU> & dramwr_streams4, tapa::ostreams<Data, 2*BU> & dramwr_streams5, tapa::ostreams<Data, 2*BU> & dramwr_streams6, tapa::ostreams<Data, 2*BU> & dramwr_streams7, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
 
 	tapa::task()
-		.invoke<tapa::detach, B>(write_dist_8_int_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, dramwr_streams4, dramwr_streams5, dramwr_streams6, dramwr_streams7, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, BU>(write_dist_8_int_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, dramwr_streams4, dramwr_streams5, dramwr_streams6, dramwr_streams7, core_ostreams_e, core_ostreams_o)
 	;
 }
 
 
-void write_dist_m(tapa::ostreams<Data, 2*B*GROUP_CH_NUM> & dramwr_streams, tapa::istreams<Data, B> & core_ostreams_e, tapa::istreams<Data, B> & core_ostreams_o ){
+void write_dist_m(tapa::ostreams<Data, 2*BU*GROUP_CH_NUM> & dramwr_streams, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
 
 	tapa::task()
 #if GROUP_CH_NUM == 2
@@ -658,9 +658,9 @@ void write_dist_m(tapa::ostreams<Data, 2*B*GROUP_CH_NUM> & dramwr_streams, tapa:
 	;
 }
 
-void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*B> & dramwr_streams, int sample_num){
+void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dramwr_streams, int sample_num){
 
-	for(int sample = 0; sample < sample_num/NUM_CH; sample++){
+	for(int sample = 0; sample < sample_num/CH; sample++){
         	for(int i = 0; i < n/kVecLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data;
@@ -677,7 +677,7 @@ void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*B> & dramw
 
 void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE_NUM> & dramrd_streams, int sample_num){
 
-	for(int sample = 0; sample < sample_num/NUM_CH; sample++){
+	for(int sample = 0; sample < sample_num/CH; sample++){
 	       	for(int i = 0; i < n/kVecLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/kVecLen) + i] );
@@ -686,20 +686,20 @@ void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE
 	}
 }
 
-void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, B> & core_istreams_e, tapa::ostreams<Data, B> & core_istreams_o){
+void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o){
 	for(;;){
 	        //for(int i = 0; i < n/kVecLen; i++){
 #pragma HLS PIPELINE II = GROUP_CORE_NUM
 		if( !dramrd_stream.empty() ){
 			DataVec data = dramrd_stream.read();
 			for(int core = 0; core < GROUP_CORE_NUM; core++){
-				for(int d = 0; d < B; d++){
+				for(int d = 0; d < BU; d++){
 #pragma HLS UNROLL
-					core_istreams_e[d].write( data[core*2*B+d] );			
+					core_istreams_e[d].write( data[core*2*BU+d] );			
 				}
-				for(int d = 0; d < B; d++){
+				for(int d = 0; d < BU; d++){
 #pragma HLS UNROLL
-					core_istreams_o[d].write( data[core*2*B+B+d] );			
+					core_istreams_o[d].write( data[core*2*BU+BU+d] );			
 				}
 			}
 		}
@@ -707,18 +707,18 @@ void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, B>
 	}
 }
 
-void write_reshape_s(tapa::ostream<DataVec> & dramwr_stream, tapa::istreams<Data, B> & core_ostreams_e, tapa::istreams<Data, B> & core_ostreams_o ){
+void write_reshape_s(tapa::ostream<DataVec> & dramwr_stream, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
 
 WRITE_RESHAPE_S_LOOP:
 	for(;;){
 #pragma HLS PIPELINE II = GROUP_CORE_NUM 
 		DataVec data;
 		for(int c = 0; c < GROUP_CORE_NUM; c++){
-			for(int d = 0; d < B; d++){
-				data[c*2*B+2*d] = core_ostreams_e[d].read();
+			for(int d = 0; d < BU; d++){
+				data[c*2*BU+2*d] = core_ostreams_e[d].read();
 			}
-			for(int d = 0; d < B; d++){
-				data[c*2*B+2*d+1] = core_ostreams_o[d].read();
+			for(int d = 0; d < BU; d++){
+				data[c*2*BU+2*d+1] = core_ostreams_o[d].read();
 			}
 		}
 		dramwr_stream.write(data);
@@ -727,7 +727,7 @@ WRITE_RESHAPE_S_LOOP:
 
 void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_CORE_NUM> & dramwr_streams, int sample_num){
 
-	for(int sample = 0; sample < sample_num/NUM_CH; sample++){
+	for(int sample = 0; sample < sample_num/CH; sample++){
 	       	for(int i = 0; i < n/kVecLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data = dramwr_streams[sample%GROUP_CORE_NUM].read();
@@ -739,10 +739,10 @@ void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_COR
 #endif
 
 
-void ntt_core(int id, tapa::istreams<Data, B> core_istreams_e, tapa::istreams<Data, B> core_istreams_o, tapa::ostreams<Data, B> core_ostreams_e, tapa::ostreams<Data, B> core_ostreams_o, int SAMPLES){
+void ntt_core(int id, tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o, int SAMPLES){
 
-	tapa::streams<Data, B*(num_temp_stage+1), 2> even_streams("even_streams");
-	tapa::streams<Data, B*(num_temp_stage+1), 2> odd_streams("odd_streams");
+	tapa::streams<Data, BU*(num_temp_stage+1), 2> even_streams("even_streams");
+	tapa::streams<Data, BU*(num_temp_stage+1), 2> odd_streams("odd_streams");
 
 	tapa::task()
 		.invoke<tapa::detach>(input_mem_stage, core_istreams_e, core_istreams_o, even_streams, odd_streams, SAMPLES)
@@ -751,27 +751,27 @@ void ntt_core(int id, tapa::istreams<Data, B> core_istreams_e, tapa::istreams<Da
 }
 
 
-void ntt(tapa::mmaps<bits<DataVec>, NUM_CH> x, tapa::mmaps<bits<DataVec>, NUM_CH> y, int sample_num){
+void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int sample_num){
 
 #ifdef MCH
-	tapa::streams<Data, 2*B*NUM_CH, SAMPLE_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
-	tapa::streams<Data, 2*B*NUM_CH, SAMPLE_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
+	tapa::streams<Data, 2*BU*CH, SAMPLE_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
+	tapa::streams<Data, 2*BU*CH, SAMPLE_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
 #else
 	tapa::streams<DataVec, NUM_CORE, SAMPLE_FIFO_DEPTH_S> dramrd_streams("dramrd_streams");
 	tapa::streams<DataVec, NUM_CORE, SAMPLE_FIFO_DEPTH_S> dramwr_streams("dramwr_streams");
 #endif
-	tapa::streams<Data, B*NUM_CORE, 2> core_istreams_e("core_istreams_e");
-	tapa::streams<Data, B*NUM_CORE, 2> core_istreams_o("core_istreams_o");
+	tapa::streams<Data, BU*NUM_CORE, 2> core_istreams_e("core_istreams_e");
+	tapa::streams<Data, BU*NUM_CORE, 2> core_istreams_o("core_istreams_o");
 
-	tapa::streams<Data, B*NUM_CORE, 2> core_ostreams_e("core_ostreams_e");
-	tapa::streams<Data, B*NUM_CORE, 2> core_ostreams_o("core_ostreams_o");
+	tapa::streams<Data, BU*NUM_CORE, 2> core_ostreams_e("core_ostreams_e");
+	tapa::streams<Data, BU*NUM_CORE, 2> core_ostreams_o("core_ostreams_o");
 
 	tapa::task()
 #ifdef MCH
-		.invoke<tapa::join, NUM_CH>(read_dram_m, x, dramrd_streams, sample_num)
+		.invoke<tapa::join, CH>(read_dram_m, x, dramrd_streams, sample_num)
 		.invoke<tapa::detach, GROUP_NUM>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
 #else
-		.invoke<tapa::join, NUM_CH>(read_dram_s, x, dramrd_streams, sample_num)
+		.invoke<tapa::join, CH>(read_dram_s, x, dramrd_streams, sample_num)
 	 	.invoke<tapa::detach, NUM_CORE>(read_dist_s, dramrd_streams, core_istreams_e, core_istreams_o)
 #endif
 
@@ -779,10 +779,10 @@ void ntt(tapa::mmaps<bits<DataVec>, NUM_CH> x, tapa::mmaps<bits<DataVec>, NUM_CH
 
 #ifdef MCH
 		.invoke<tapa::detach, GROUP_NUM>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
-		.invoke<tapa::join, NUM_CH>(write_dram_m, y, dramwr_streams, sample_num)
+		.invoke<tapa::join, CH>(write_dram_m, y, dramwr_streams, sample_num)
 #else
 		.invoke<tapa::detach, NUM_CORE>(write_reshape_s, dramwr_streams, core_ostreams_e, core_ostreams_o)
-		.invoke<tapa::join, NUM_CH>(write_dram_s, y, dramwr_streams, sample_num)
+		.invoke<tapa::join, CH>(write_dram_s, y, dramwr_streams, sample_num)
 #endif
 	;
 

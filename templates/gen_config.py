@@ -19,7 +19,7 @@ DEVICE_CONFIG = CONFIG_DIR / "device_config.json"
 PIPELINE_CONFIG = CONFIG_DIR / "pipeline_config.json"
 VITIS_PLATFORM = "xilinx_u280_gen3x16_xdma_1_202211_1"
 
-def gen_config(num_ch: int) -> None:
+def gen_config(ch: int) -> None:
     """Generate configuration files."""
     if not os.path.exists(CONFIG_DIR):
         os.makedirs(CONFIG_DIR)
@@ -30,7 +30,7 @@ def gen_config(num_ch: int) -> None:
         "interrupt": "SLOT_X0Y0:SLOT_X0Y0",
         "s_axi_control_.*": "SLOT_X0Y0:SLOT_X0Y0",
     }
-    for i in range(num_ch):
+    for i in range(ch):
         if i < 8:
             port_pre_assignments[f".*m_axi_x_{i}_.*"] = "SLOT_X0Y0:SLOT_X0Y0"
             port_pre_assignments[f".*m_axi_y_{i}_.*"] = "SLOT_X0Y0:SLOT_X0Y0"
@@ -46,13 +46,13 @@ def gen_config(num_ch: int) -> None:
     )
     floorplan_config.save_to_file(FLOOR_PLAN_CONFIG)
 
-    left_num_ch = num_ch if num_ch < 8 else 8
-    right_num_ch = 0 if num_ch < 8 else num_ch - left_num_ch 
+    left_ch = ch if ch < 8 else 8
+    right_ch = 0 if ch < 8 else ch - left_ch 
 
     factory = get_u280_vitis_device_factory(VITIS_PLATFORM)
     #Reserving LUTs/FFs for HBM memory sub-system
-    factory.reduce_slot_area(0, 0, lut=5000*2*left_num_ch, ff=6500*2*left_num_ch)
-    factory.reduce_slot_area(1, 0, lut=5000*2*right_num_ch, ff=6500*2*right_num_ch)
+    factory.reduce_slot_area(0, 0, lut=5000*2*left_ch, ff=6500*2*left_ch)
+    factory.reduce_slot_area(1, 0, lut=5000*2*right_ch, ff=6500*2*right_ch)
     #Excluding DSPs on the boundary between dynamic/static region
     factory.reduce_slot_area(1, 1, dsp=100)
     factory.generate_virtual_device(Path(DEVICE_CONFIG))
@@ -72,12 +72,12 @@ if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Generate configuration files.")
     parser.add_argument(
-        "--num_ch",
+        "--ch",
         type=int,
         required=True,
         help="The number of in/out channels used by NTT.",
     )
     args = parser.parse_args()
 
-    # Call the function with the provided num_ch
-    gen_config(num_ch=args.num_ch)
+    # Call the function with the provided ch
+    gen_config(ch=args.ch)

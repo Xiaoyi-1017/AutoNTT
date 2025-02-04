@@ -14,29 +14,28 @@ Rapidstream (2025.1.0109, recommended) - https://docs.rapidstream-da.com/
 pip install -r requirements.txt 
 ```
 
-## How to use generate_code.py
+## Generating an NTT project 
 
-Please use this code to automatically generate an NTT project.
+Please use generate_code.py to automatically generate an NTT project.
 
-Arguments
-- **N**: Transform size, polynomial degree
-- **q**: Prime modulus (i.e. 12289)
-- **bits**: Bit length of coefficients
-- **B**: Number of butterfly units in parallel (per stage)
-- **NUM_CH**: Number of HBM channels input (Total of 2*NUM_CH channels are used for input & output)
-
-Condition: NUM_CH * VECLEN / number of coefficients in parallel -> Integer
+| Argument | Description | Supported Values | Default |
+|----------|-------------|-----------------|---------|
+| **N** | Transform size (polynomial degree) | 256, 512, 1024 | 1024 |
+| **q** | Prime modulus | 3329, 8380417, 12289 | 12289 |
+| **bits** | Bit length of coefficients | 16, 32 | 32 |
+| **BU** | Number of butterfly units per stage | 1, 2, 4, 8, 16, 32 | 8 |
+| **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8 | 4 |
 
 Command: (with default values)
 ```bash
-./generate_code.py -N 1024 -q 12289 -bits 32 -B 8 -NUM_CH 4 
+./generate_code.py -N 1024 -q 12289 -bits 32 -BU 8 -CH 4 
 ```
 
 Terminal output:
 ```bash
-Values used -> N: 1024, q: 12289, bits: 32, B: 8, NUM_CH: 4, veclen: 16
+Values used -> N: 1024, q: 12289, bits: 32, BU: 8, CH: 4, veclen: 16
 Number of NTT cores: 4
-Creating a new folder: N_1024_B_8_CH_4
+Creating a new folder: N1024_BU8_CH4
 ```
 
 ## How to use MAKEFILE
@@ -63,7 +62,7 @@ make all TARGET=hw-opt
 ```
 Simulation / Onboard verification (NUM = number of samples)
 ```bash
-make run TARGET=(sw / xo / hw / hw-opt)  NUM=10000
+make run TARGET={sw | xo | hw | hw-opt} NUM=10000
 ```
 
 ## Updates

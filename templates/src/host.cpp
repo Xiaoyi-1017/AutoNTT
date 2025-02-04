@@ -33,7 +33,7 @@ void get_omega_mat(int Omega[n][n], int mod, int psi) {
 }
 
 
-void sw_ntt(std::vector<Data, tapa::aligned_allocator<Data>> A, std::vector<Data, tapa::aligned_allocator<Data>> &out_sw, int psi, int q, const int SAMPLES){
+void sw_ntt(std::vector<Data, tapa::aligned_allocator<Data>> A, std::vector<Data, tapa::aligned_allocator<Data>> &out_sw, int psi, int q, const int SAMPLE_NUM){
   int omega[n][n];
   get_omega_mat(omega, mod, psi);
   #pragma omp parallel
@@ -45,7 +45,7 @@ void sw_ntt(std::vector<Data, tapa::aligned_allocator<Data>> A, std::vector<Data
 		}
 	}
   #pragma omp parallel for
-  for(int i = 0; i < SAMPLES; i++){
+  for(int i = 0; i < SAMPLE_NUM; i++){
     for (int j = 0; j < n; ++j) {
         int sum = 0;
         for (int k = 0; k < n; ++k) {
@@ -56,7 +56,7 @@ void sw_ntt(std::vector<Data, tapa::aligned_allocator<Data>> A, std::vector<Data
   }
 }
 
-void bit_reverse_hw_out(std::vector<Data, tapa::aligned_allocator<Data>> out_hw, std::vector<Data, tapa::aligned_allocator<Data>> &out_hw_BR, const int SAMPLES){
+void bit_reverse_hw_out(std::vector<Data, tapa::aligned_allocator<Data>> out_hw, std::vector<Data, tapa::aligned_allocator<Data>> &out_hw_BR, const int SAMPLE_NUM){
 #pragma omp parallel 
 {
     int tid = omp_get_thread_num();
@@ -67,99 +67,29 @@ void bit_reverse_hw_out(std::vector<Data, tapa::aligned_allocator<Data>> out_hw,
 }
 #pragma omp parallel for
 //Bit-reversing the HW output
-    for(int i = 0; i < SAMPLES; i++){
+    for(int i = 0; i < SAMPLE_NUM; i++){
       for(int j = 0; j < n; j++){
           out_hw_BR[n*i + bit_reverse(j)] = out_hw[n*i + j];
       }
     }
 }
 
-void ntt_ct_temporal(std::vector<Data, tapa::aligned_allocator<Data>> input, std::vector<Data, tapa::aligned_allocator<Data>> &output, int SAMPLES){
-    
-    int coeff[log2N+1][n];
+void copy_input(std::vector<Data, tapa::aligned_allocator<Data>> input, 
+		std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> &X, int SAMPLE_NUM){
 
-    for(int ind = 0; ind < SAMPLES; ind++){
-        
-        for(int i = 0; i < n; i++){
-          coeff[0][i] = input[n*ind + i];
-        }
-
-        for (size_t stage = 0; stage < log2N - log2B -1; stage++)
-        {
-            int stride = (n >> (stage + 1));
-
-            for (size_t i = 0; i < n / 2; i++)
-            {
-                int idx_even = (i % stride) + (i / stride) * 2 * stride;
-                int idx_odd = idx_even + stride;
-                int idx_psi = (i / stride) + n / (2 * stride);
-
-                int multiplied = coeff[stage][idx_odd] * tw_factors[idx_psi];
-
-                int t = multiplied % mod;
-
-                // Cooley-Tukey butterfly
-                int coeff_odd = coeff[stage][idx_even] - t;
-                int coeff_even = coeff[stage][idx_even] + t;
-
-                // Write results to temp variables first to minimize dependencies
-                int temp_odd = (coeff_odd < 0) ? (coeff_odd + mod) : coeff_odd;
-                int temp_even = (coeff_even >= mod) ? (coeff_even - mod) : coeff_even;
-
-                coeff[stage+1][idx_odd] = temp_odd;
-                coeff[stage+1][idx_even] = temp_even;
-            }
-                
-        }
-
-        for(int i = 0; i < n; i++){
-            output[n*ind + i] = coeff[log2N - log2B -1][i];
-        }    
-    }
-}
-
-void rearrange(std::vector<Data, tapa::aligned_allocator<Data>> arr, std::vector<Data, tapa::aligned_allocator<Data>> &out, int last_stride, int SAMPLES){
-    int stride = last_stride >> 1;
-
-    for(int ind = 0; ind < SAMPLES; ind++){
-      for(int i = 0; i < n/last_stride; i++){
-        for(int j = 0; j < stride; j++){
-            out[n*ind + i*last_stride+ j] = arr[n*ind + i*last_stride+ 2*j];
-            out[n*ind + i*last_stride+ j + stride] = arr[n*ind + i*last_stride+ 2*j+1];
-        }
-      }
-    }
-    
-}
-
-void print_array(std::vector<Data, tapa::aligned_allocator<Data>> arr, int SAMPLES){
-
-    for(int i = 0; i < SAMPLES; i++){
-      for(int j = 0; j < DEPTH; j++){
-            for(int k = 0; k < WIDTH; k++){          
-            std::cout << arr[n*i + WIDTH*j + k] << " ";
-            }
-            std::cout << std::endl;
-  		}
-    }
-}
-
-void process_input(std::vector<Data, tapa::aligned_allocator<Data>> input, 
-		std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> &X, int SAMPLES){
-
-	for(int i = 0; i < SAMPLES; i++){
+	for(int i = 0; i < SAMPLE_NUM; i++){
 		for(int j = 0; j < n; j++){
-			//   input[i*n + j] = rand() % mod;
-			X[i%NUM_CH][(i/NUM_CH)*n+j] = input[i*n + j];
+			//X[i%CH][(i/CH)*n+j] = rand() % mod;
+			X[i%CH][(i/CH)*n+j] = input[i*n + j];
 		}
 	}
 }
 
-void process_output(std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> Y, 
-		std::vector<Data, tapa::aligned_allocator<Data>> &out_hw, int SAMPLES){
-	for(int i = 0; i < SAMPLES; i++){
+void copy_output(std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> Y, 
+		std::vector<Data, tapa::aligned_allocator<Data>> &out_hw, int SAMPLE_NUM){
+	for(int i = 0; i < SAMPLE_NUM; i++){
 		for(int j = 0; j < n; j++){
-			out_hw[i*n + j] = Y[i%NUM_CH][(i/NUM_CH)*n+j];
+			out_hw[i*n + j] = Y[i%CH][(i/CH)*n+j];
 		}
 	}
 }
@@ -167,7 +97,7 @@ void process_output(std::vector<std::vector<int, tapa::aligned_allocator<int> >,
 
 
 
-void ntt(tapa::mmaps<bits<DataVec>, NUM_CH> x, tapa::mmaps<bits<DataVec>, NUM_CH> y, int SAMPLES);
+void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int SAMPLE_NUM);
 
 DEFINE_string(bitstream, "", "path to bitstream file, run csim if empty");
 
@@ -175,39 +105,38 @@ int main(int argc, char* argv[]) {
 
     gflags::ParseCommandLineFlags(&argc, &argv, /*remove_flags=*/true);
 
-    const int SAMPLES = argc > 1 ? atoll(argv[1]) : 1000;
+    const int SAMPLE_NUM = argc > 1 ? atoll(argv[1]) : 1000;
 
     const int N = n;
 
-    const int ADJ_FACTOR = NUM_CH > NUM_CORE ? NUM_CH : NUM_CORE;
-    const int ADJ_SAMPLE_NUM = ((SAMPLES - 1) / ADJ_FACTOR + 1) * ADJ_FACTOR;
+    const int ADJ_FACTOR = CH > NUM_CORE ? CH : NUM_CORE;
+    const int ADJ_SAMPLE_NUM = ((SAMPLE_NUM - 1) / ADJ_FACTOR + 1) * ADJ_FACTOR;
 
-    // Added SAMPLES % NUM_CORE so that it could be dvided by NUM_CORE 
     std::vector<Data, tapa::aligned_allocator<Data>> input(n*ADJ_SAMPLE_NUM);
     
     std::vector<Data, tapa::aligned_allocator<Data>> out_sw(n*ADJ_SAMPLE_NUM);
     std::vector<Data, tapa::aligned_allocator<Data>> out_hw(n*ADJ_SAMPLE_NUM);
     std::vector<Data, tapa::aligned_allocator<Data>> out_hw_BR(n*ADJ_SAMPLE_NUM);
 
-    std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> X(NUM_CH);
-    std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> Y(NUM_CH);
+    std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> X(CH);
+    std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> Y(CH);
 
 
 
-    int last_stride = n >> (log2N - log2B -1);
+    int last_stride = n >> (log2N - log2BU -1);
 
     // Generate twiddle factors
     std::cout << "n: " << n << " mod: " << mod << std::endl;
-    std::cout << "NUMBER OF SAMPLES: " << SAMPLES << " (adjusted to " << ADJ_SAMPLE_NUM << ")" << std::endl; 
+    std::cout << "Number OF samples: " << ADJ_SAMPLE_NUM << " (adjusted from " << SAMPLE_NUM << ")" << std::endl; 
     std::cout << "Number of NTT cores: " << NUM_CORE << std::endl;
-    std::cout << "Number of butterfly units per NTT core: " << B << std::endl; 
-    std::cout << "Number of input and output DRAM channels: " << NUM_CH << std::endl;
+    std::cout << "Number of butterfly units per NTT core: " << BU << std::endl; 
+    std::cout << "Number of input and output DRAM channels: " << CH << std::endl;
     std::cout << "DEPTH per sample: " << DEPTH << std::endl;
   
     srand(time(NULL));
 
     // Create the test data 
-    for(int i = 0; i < SAMPLES; i++){
+    for(int i = 0; i < ADJ_SAMPLE_NUM; i++){
       for(int j = 0; j < n; j++){
         //   input[i*n + j] = rand() % mod;
           input[i*n + j] = (i*n + j) % mod;
@@ -215,31 +144,30 @@ int main(int argc, char* argv[]) {
     }
 
     // Resize each channel into appropriate size
-    int CHANNEL_SIZE = n*ADJ_SAMPLE_NUM/NUM_CH;
+    int CHANNEL_SIZE = n*ADJ_SAMPLE_NUM/CH;
 
     if( CHANNEL_SIZE * sizeof(Data) > 256 * 1024 * 1024 ){
         std::cout << "Error: Data size of each channel (" << CHANNEL_SIZE * sizeof(Data) << ") exceeds 256 MB" << std::endl;
         exit(1);
     }  
 
-    for (int cc = 0; cc < NUM_CH; ++cc) {
+    for (int cc = 0; cc < CH; ++cc) {
         X[cc].resize(CHANNEL_SIZE, 0);
         Y[cc].resize(CHANNEL_SIZE, 0);
     }
 
-    process_input(input, X, ADJ_SAMPLE_NUM);
+    copy_input(input, X, ADJ_SAMPLE_NUM);
     
     std::cout << "Test data generation DONE" << std::endl;
 
-    sw_ntt(input, out_sw, psi, mod, SAMPLES);
+    sw_ntt(input, out_sw, psi, mod, ADJ_SAMPLE_NUM);
 
     std::cout << "SW Computation Done. Launching FPGA Kernel..." << std::endl;
 
     int64_t kernel_time_ns =
       tapa::invoke(ntt, FLAGS_bitstream,
-                   tapa::read_only_mmaps<Data, NUM_CH>(X).reinterpret<bits<DataVec>>(),
-                   tapa::write_only_mmaps<Data, NUM_CH>(Y).reinterpret<bits<DataVec>>(), 
-                   //(SAMPLES + extra)/NUM_CORE);
+                   tapa::read_only_mmaps<Data, CH>(X).reinterpret<bits<DataVec>>(),
+                   tapa::write_only_mmaps<Data, CH>(Y).reinterpret<bits<DataVec>>(), 
 		ADJ_SAMPLE_NUM);
 
 
@@ -250,59 +178,19 @@ int main(int argc, char* argv[]) {
     std::cout << "Kernel throughput: " << (double)ADJ_SAMPLE_NUM / kernel_time_ns * 1e3 << " Msamples/s" << std::endl; 
     std::cout << "Eff BW per HBM channel: " << (double)CHANNEL_SIZE*sizeof(Data) / kernel_time_ns << " GB/s" << std::endl; 
     
-    std::cout << "Processing output ...\n";
+    std::cout << "Copying output ...\n";
   
-    process_output(Y, out_hw, ADJ_SAMPLE_NUM);    
+    copy_output(Y, out_hw, ADJ_SAMPLE_NUM);    
 
     bit_reverse_hw_out(out_hw, out_hw_BR, ADJ_SAMPLE_NUM);
 
     std::cout << "Done\n";
         
-    //Printing
-    // for(int i = 0; i < ADJ_SAMPLE_NUM; i++){
-    //  std::cout << "INPUT" << std::endl;
-    //  for(int j = 0; j < n / WIDTH; j++){
-    //      for(int k = 0; k < WIDTH; k++){
-    //          std::cout << input[n * i + WIDTH * j + k] << " ";
-    //      }
-    //      std::cout << std::endl;
-    //  }
-    //  std::cout << std::endl;
-
-    //  std::cout << "SW OUTPUT" << std::endl;
-    //  for(int j = 0; j < n / WIDTH; j++){
-    //      for(int k = 0; k < WIDTH; k++){
-    //          std::cout << out_sw[n * i + WIDTH * j + k] << " ";
-    //      }
-    //      std::cout << std::endl;
-    //  }
-    //  std::cout << std::endl;
-
-    //  std::cout << "HW OUTPUT" << std::endl;
-    //  for(int j = 0; j < n / WIDTH; j++){
-    //      for(int k = 0; k < WIDTH; k++){
-    //          std::cout << out_hw[n * i + WIDTH * j + k] << " ";
-    //      }
-    //      std::cout << std::endl;
-    //  }
-    //  std::cout << std::endl;
-
-    //  std::cout << "HW OUTPUT (BR)" << std::endl;
-    //  for(int j = 0; j < n / WIDTH; j++){
-    //     for(int k = 0; k < WIDTH; k++){
-    //         std::cout << out_hw_BR[n * i + WIDTH * j + k] << " ";
-    //     }
-    //     std::cout << std::endl;
-    //  }
-    //  std::cout << std::endl;
-    // }
-
-
 
     // Compare the results of the Device to the simulation
 
 	int err_cnt = 0;
-	for(int i = 0; i<SAMPLES; i++){
+	for(int i = 0; i<ADJ_SAMPLE_NUM; i++){
 		for(int j = 0; j< n; j++){
 			//printf("Sample %d index %d - sw:%d, hw:%d\n", i, j, out_sw[i*n+j], out_hw_BR[i*n+j]); 
 			if(out_sw[i*n+j] != out_hw_BR[i*n+j]) {
@@ -313,7 +201,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	if(err_cnt != 0){
-		printf("FAILED! Error count : %d / %d\n", err_cnt, SAMPLES*n);
+		printf("FAILED! Error count : %d / %d\n", err_cnt, ADJ_SAMPLE_NUM*n);
 	}
 	else{
 		printf("PASSED!\n");
