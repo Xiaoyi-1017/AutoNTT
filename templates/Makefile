@@ -218,7 +218,7 @@ help:
 	@echo "        hw-opt  - Optimize with Rapidstream and build FPGA bitstream"
 	@echo ""
 	@echo "  Run Commands:"
-	@echo "    make run TARGET=<type> NUM=<sample_num>  # Run with the TARGET for specified number of samples"
+	@echo "    make run TARGET=<type> NUM=<poly_num>  # Run with the TARGET for specified number of polynomials"
 	@echo "      Valid TARGET values:"
 	@echo "        sw      - Run software simulation"
 	@echo "        xo      - Simulate with the XO file"

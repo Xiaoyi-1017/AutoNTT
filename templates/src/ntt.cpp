@@ -149,9 +149,8 @@ void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_od
     *out_odd  = static_cast<Data>(out1);
 }
 
-
 void bf_unit(int id, int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
-		tapa::ostream<Data>& output0, tapa::ostream<Data>& output1, int SAMPLES){
+		tapa::ostream<Data>& output0, tapa::ostream<Data>& output1){
 
 	int stride = n >> (stage + 1); 
 
@@ -181,7 +180,7 @@ BF_LOOP:
 
 
 void mem_stage(const int stage, tapa::istream<Data>& input_stream0, tapa::istream<Data>& input_stream1, 
-		tapa::ostream<Data>& output_stream0, tapa::ostream<Data>& output_stream1, int SAMPLES)
+		tapa::ostream<Data>& output_stream0, tapa::ostream<Data>& output_stream1)
 {
 	const int stride = DEPTH >> (stage+1);
 	const int shift = num_temp_stage - (stage+1);
@@ -272,7 +271,7 @@ MEM_STAGE_LOOP:
 			}
 		}
 
-		//Go to the next sample when all existing data has been written out
+		//Go to the next polynomial when all existing data has been written out
 		//and when either reading data has finished or no data has been read
 		if( (read_done == true || read_i == 0) && (read_exist == false || write_done == true) ){
 			if(read_done == true){
@@ -291,20 +290,20 @@ MEM_STAGE_LOOP:
 }
 
 void temporal_stage(int stage, tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
-		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1, int SAMPLES){
+		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1){
 
 	tapa::streams<Data, BU> inter_streams0;
 	tapa::streams<Data, BU> inter_streams1;
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(bf_unit, tapa::seq(), stage, input_stream0, input_stream1, inter_streams0, inter_streams1, SAMPLES)
-		.invoke<tapa::detach, BU>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1, SAMPLES);
+		.invoke<tapa::detach, BU>(bf_unit, tapa::seq(), stage, input_stream0, input_stream1, inter_streams0, inter_streams1)
+		.invoke<tapa::detach, BU>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1);
 }
 
 void spatial_stages(tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
-		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1, int SAMPLES){
+		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1){
 
-	const int num_of_stages = log2BU + 1;
+	const int num_of_stages = logBU + 1;
 	Data mem[num_of_stages+1][WIDTH];
 	ap_uint<logDEPTH> i = 0;
 
@@ -330,7 +329,7 @@ STAGE_LOOP:
 			for(int s = 0; s < num_of_stages; s++){
 #pragma HLS unroll 
 
-				int current_stage = s + log2N - log2BU -1;
+				int current_stage = s + logN - logBU -1;
 				int stride = n >> ((current_stage) + 1);
 				int next_stride = stride >> 1;
 
@@ -374,7 +373,7 @@ OUTPUT_LOOP:
 }
 
 void input_mem_stage_int(int id, tapa::istream<Data>& x_0, tapa::istream<Data>& x_1,
-		tapa::ostream<Data>& even_y, tapa::ostream<Data>& odd_y, int SAMPLES){
+		tapa::ostream<Data>& even_y, tapa::ostream<Data>& odd_y){
 
 	// memory for entry with EVEN indices
 	Data mem0[2][DEPTH/2]; 
@@ -451,7 +450,7 @@ INPUT_MEM_STAGE_LOOP:
 			} 
 		}
 
-		//Go to the next sample when all existing data has been written out
+		//Go to the next polynomial when all existing data has been written out
 		//and when either reading data has finished or no data has been read
 		if( (read_done == true || read_i == 0) && (read_exist == false || write_done == true) ){
 			if(read_done == true){
@@ -470,10 +469,10 @@ INPUT_MEM_STAGE_LOOP:
 }
 
 void input_mem_stage(tapa::istreams<Data, BU>& x_0, tapa::istreams<Data, BU>& x_1,
-		tapa::ostreams<Data, BU>& y_0, tapa::ostreams<Data, BU>& y_1, int SAMPLES){
+		tapa::ostreams<Data, BU>& y_0, tapa::ostreams<Data, BU>& y_1){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(input_mem_stage_int, tapa::seq(), x_0, x_1, y_0, y_1, SAMPLES);
+		.invoke<tapa::detach, BU>(input_mem_stage_int, tapa::seq(), x_0, x_1, y_0, y_1);
 }
 
 
@@ -481,12 +480,12 @@ void input_mem_stage(tapa::istreams<Data, BU>& x_0, tapa::istreams<Data, BU>& x_
 
 #ifdef MCH
 
-void read_dram_m(tapa::mmap<bits<DataVec>> x, tapa::ostreams<Data, 2*BU> & dramrd_streams, int sample_num){
+void read_dram_m(tapa::mmap<bits<DataVec>> x, tapa::ostreams<Data, 2*BU> & dramrd_streams, int poly_num){
 
-	for(int sample = 0; sample < sample_num/CH; sample++){
+	for(int poly = 0; poly < poly_num/CH; poly++){
         	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
-			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/DataCHLen) + i] ); 
+			DataVec data = tapa::bit_cast<DataVec>( x[poly * (n/DataCHLen) + i] ); 
 			for(int d = 0; d < DataCHLen; d++){
 #pragma HLS UNROLL
 				dramrd_streams[(i % CORE_DRAM_WIDTH_RATIO)*DataCHLen+d].write( data[d] );			
@@ -759,9 +758,9 @@ void write_dist_m(tapa::ostreams<Data, 2*BU*GROUP_CH_NUM> & dramwr_streams, tapa
 	;
 }
 
-void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dramwr_streams, int sample_num){
+void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dramwr_streams, int poly_num){
 
-	for(int sample = 0; sample < sample_num/CH; sample++){
+	for(int poly = 0; poly < poly_num/CH; poly++){
         	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data;
@@ -769,20 +768,20 @@ void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dram
 #pragma HLS UNROLL
 				data[d] = dramwr_streams[(i % CORE_DRAM_WIDTH_RATIO)*DataCHLen+d].read();			
 			}
-            		y[sample * (n/DataCHLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
+            		y[poly * (n/DataCHLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
 		}	
 	}
 }
 
 #else
 
-void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE_NUM> & dramrd_streams, int sample_num){
+void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE_NUM> & dramrd_streams, int poly_num){
 
-	for(int sample = 0; sample < sample_num/CH; sample++){
+	for(int poly = 0; poly < poly_num/CH; poly++){
 	       	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
-			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/DataCHLen) + i] );
-			dramrd_streams[sample%GROUP_CORE_NUM].write(data);
+			DataVec data = tapa::bit_cast<DataVec>( x[poly * (n/DataCHLen) + i] );
+			dramrd_streams[poly%GROUP_CORE_NUM].write(data);
 		}
 	}
 }
@@ -828,13 +827,13 @@ WRITE_RESHAPE_S_LOOP:
 	}
 }
 
-void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_CORE_NUM> & dramwr_streams, int sample_num){
+void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_CORE_NUM> & dramwr_streams, int poly_num){
 
-	for(int sample = 0; sample < sample_num/CH; sample++){
+	for(int poly = 0; poly < poly_num/CH; poly++){
 	       	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
-			DataVec data = dramwr_streams[sample%GROUP_CORE_NUM].read();
-            		y[sample * (n/DataCHLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
+			DataVec data = dramwr_streams[poly%GROUP_CORE_NUM].read();
+            		y[poly * (n/DataCHLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
 		}
 	}
 }
@@ -842,26 +841,26 @@ void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_COR
 #endif
 
 
-void ntt_core(int id, tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o, int SAMPLES){
+void ntt_core(int id, tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o){
 
 	tapa::streams<Data, BU*(num_temp_stage+1), 2> even_streams("even_streams");
 	tapa::streams<Data, BU*(num_temp_stage+1), 2> odd_streams("odd_streams");
 
 	tapa::task()
-		.invoke<tapa::detach>(input_mem_stage, core_istreams_e, core_istreams_o, even_streams, odd_streams, SAMPLES)
-		.invoke<tapa::detach, num_temp_stage>(temporal_stage, tapa::seq(), even_streams, odd_streams, even_streams, odd_streams, SAMPLES)
-		.invoke<tapa::detach>(spatial_stages, even_streams, odd_streams, core_ostreams_e, core_ostreams_o, SAMPLES); 
+		.invoke<tapa::detach>(input_mem_stage, core_istreams_e, core_istreams_o, even_streams, odd_streams)
+		.invoke<tapa::detach, num_temp_stage>(temporal_stage, tapa::seq(), even_streams, odd_streams, even_streams, odd_streams)
+		.invoke<tapa::detach>(spatial_stages, even_streams, odd_streams, core_ostreams_e, core_ostreams_o); 
 }
 
 
-void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int sample_num){
+void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int poly_num){
 
 #ifdef MCH
-	tapa::streams<Data, 2*BU*CH, SAMPLE_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
-	tapa::streams<Data, 2*BU*CH, SAMPLE_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
+	tapa::streams<Data, 2*BU*CH, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
+	tapa::streams<Data, 2*BU*CH, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
 #else
-	tapa::streams<DataVec, NUM_CORE, SAMPLE_FIFO_DEPTH_S> dramrd_streams("dramrd_streams");
-	tapa::streams<DataVec, NUM_CORE, SAMPLE_FIFO_DEPTH_S> dramwr_streams("dramwr_streams");
+	tapa::streams<DataVec, NUM_CORE, POLY_FIFO_DEPTH_S> dramrd_streams("dramrd_streams");
+	tapa::streams<DataVec, NUM_CORE, POLY_FIFO_DEPTH_S> dramwr_streams("dramwr_streams");
 #endif
 	tapa::streams<Data, BU*NUM_CORE, 2> core_istreams_e("core_istreams_e");
 	tapa::streams<Data, BU*NUM_CORE, 2> core_istreams_o("core_istreams_o");
@@ -871,21 +870,21 @@ void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int
 
 	tapa::task()
 #ifdef MCH
-		.invoke<tapa::join, CH>(read_dram_m, x, dramrd_streams, sample_num)
+		.invoke<tapa::join, CH>(read_dram_m, x, dramrd_streams, poly_num)
 		.invoke<tapa::detach, GROUP_NUM>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
 #else
-		.invoke<tapa::join, CH>(read_dram_s, x, dramrd_streams, sample_num)
+		.invoke<tapa::join, CH>(read_dram_s, x, dramrd_streams, poly_num)
 	 	.invoke<tapa::detach, NUM_CORE>(read_dist_s, dramrd_streams, core_istreams_e, core_istreams_o)
 #endif
 
-		.invoke<tapa::detach, NUM_CORE>(ntt_core, tapa::seq(), core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o, sample_num)
+		.invoke<tapa::detach, NUM_CORE>(ntt_core, tapa::seq(), core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
 
 #ifdef MCH
 		.invoke<tapa::detach, GROUP_NUM>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
-		.invoke<tapa::join, CH>(write_dram_m, y, dramwr_streams, sample_num)
+		.invoke<tapa::join, CH>(write_dram_m, y, dramwr_streams, poly_num)
 #else
 		.invoke<tapa::detach, NUM_CORE>(write_reshape_s, dramwr_streams, core_ostreams_e, core_ostreams_o)
-		.invoke<tapa::join, CH>(write_dram_s, y, dramwr_streams, sample_num)
+		.invoke<tapa::join, CH>(write_dram_s, y, dramwr_streams, poly_num)
 #endif
 	;
 

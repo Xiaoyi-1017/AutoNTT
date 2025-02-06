@@ -78,8 +78,8 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     DEPTH = n / WIDTH
     logDEPTH = int(math.log2(DEPTH))
 
-    log2N = int(math.log2(n))
-    log2BU = int(math.log2(BU))
+    logN = int(math.log2(n))
+    logBU = int(math.log2(BU))
 
     DATA_BSIZE = int(bits/8)
     DataCHLen = int(64 / DATA_BSIZE)
@@ -87,7 +87,11 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     DRAM_RATE = 0.5
     EffDataCHLen = round_to_nearest_power_of_2(DataCHLen*DRAM_RATE)
 
-    NUM_CORE = CH * EffDataCHLen / (2*BU)
+    NUM_CORE = int(CH * EffDataCHLen / (2*BU))
+
+    if NUM_CORE < 1:
+        raise ValueError(f"Error: CH*{EffDataCHLen} must be larger than 2*BU.")
+
     GROUP_NUM = int(min(CH, NUM_CORE))
     GROUP_CH_NUM = int(CH / GROUP_NUM)
     MCH = int(GROUP_CH_NUM > 1)
@@ -120,9 +124,9 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     header_content = header_content.replace("{DATA_FORMAT}", data_format)
     header_content = header_content.replace("{MOD}", str(mod))
     header_content = header_content.replace("{N}", str(n))
-    header_content = header_content.replace("{log2N}", str(log2N))
+    header_content = header_content.replace("{logN}", str(logN))
     header_content = header_content.replace("{BU}", str(BU))
-    header_content = header_content.replace("{log2BU}", str(log2BU))
+    header_content = header_content.replace("{logBU}", str(logBU))
     header_content = header_content.replace("{logDEPTH}", str(logDEPTH))
     header_content = header_content.replace("{CH}", str(CH))
     header_content = header_content.replace("{MCH}", str(MCH))

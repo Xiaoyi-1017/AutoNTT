@@ -38,18 +38,18 @@ constexpr int log2(int x) {
 
 // Number of coefficients
 constexpr int n = {N};
-constexpr int log2N = {log2N};
+constexpr int logN = {logN};
 
 constexpr int BU = {BU};
-constexpr int log2BU = {log2BU};
+constexpr int logBU = {logBU};
 
 // WIDTH: number of coeffs processed in parallel (per NTT CORE)
 constexpr int WIDTH = 2*BU;
 constexpr int DEPTH = n / WIDTH;
 constexpr int logDEPTH = {logDEPTH};
 
-constexpr int num_spat_stage = log2BU + 1;
-constexpr int num_temp_stage = log2N - (log2BU + 1);
+constexpr int num_spat_stage = logBU + 1;
+constexpr int num_temp_stage = logN - (logBU + 1);
 
 constexpr int CH = {CH};
 
@@ -67,8 +67,8 @@ constexpr int GROUP_CORE_NUM = NUM_CORE / GROUP_NUM;
 constexpr int DRAM_CORE_WIDTH_RATIO = DataCHLen / (2*BU);
 constexpr int CORE_DRAM_WIDTH_RATIO = (2*BU) / DataCHLen;
 
-constexpr int SAMPLE_FIFO_DEPTH_S = n / DataCHLen;
-constexpr int SAMPLE_FIFO_DEPTH_M = n / (2*BU);
+constexpr int POLY_FIFO_DEPTH_S = n / DataCHLen;
+constexpr int POLY_FIFO_DEPTH_M = n / (2*BU);
 
 constexpr HostData psi = {PSI};
 

@@ -1,13 +1,15 @@
 # NTT_accel_generator
-Code generator for NTT accelerator
+Code generator for FPGA NTT accelerator
 
 ### Prerequisites
 
-AMD Vitis (2023.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
+- AMD Vitis (2023.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
 
-TAPA (0.1.20250127) - https://tapa.readthedocs.io/en/main/
+- AMD Alveo U280 Platform - https://www.xilinx.com/publications/product-briefs/alveo-u280-product-brief.pdf
 
-Rapidstream (2025.1.0109, recommended) - https://docs.rapidstream-da.com/
+- TAPA (0.1.20250127) - https://tapa.readthedocs.io/en/main/
+
+- Rapidstream (2025.1.0109, recommended) - https://docs.rapidstream-da.com/
 
 ### Install Python Requirements
 ```bash
@@ -25,16 +27,16 @@ Please use generate_code.py to automatically generate an NTT project.
 | **BU** | Number of butterfly units per stage | 1, 2, 4, 8, 16, 32 | 8 |
 | **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8 | 4 |
 
-Command: (with default values)
+Example command (with default values):
 ```bash
-./generate_code.py -N 1024 -q 12289 -bits 32 -BU 8 -CH 4 
+./generate_code.py -N 1024 -q 12289 -BU 8 -CH 4 
 ```
 
-Terminal output:
-```bash
-Values used -> N: 1024, q: 12289, bits: 32, BU: 8, CH: 4, veclen: 16
-Number of NTT cores: 4
-Creating a new folder: N1024_BU8_CH4
+Example console message:
+```
+Values used -> N: 1024, q: 12289, HostData: uint16_t, BU: 8, CH: 4, veclen: 32
+Number of NTT cores: 8
+Creating a new folder: N1024_BU8_CH4_q12289
 ```
 
 ## Compilation & Execution 
@@ -58,7 +60,7 @@ Optimize xo file with Rapidstream and generate bitstream (recommended)
 ```bash
 make all TARGET=hw-opt
 ```
-Simulation / Onboard verification (NUM = number of samples)
+Simulation / Onboard verification (NUM = number of polynomials)
 ```bash
 make run TARGET={sw | xo | hw | hw-opt} NUM=10000
 ```
