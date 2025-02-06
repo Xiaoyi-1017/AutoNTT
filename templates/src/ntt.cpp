@@ -484,12 +484,12 @@ void input_mem_stage(tapa::istreams<Data, BU>& x_0, tapa::istreams<Data, BU>& x_
 void read_dram_m(tapa::mmap<bits<DataVec>> x, tapa::ostreams<Data, 2*BU> & dramrd_streams, int sample_num){
 
 	for(int sample = 0; sample < sample_num/CH; sample++){
-        	for(int i = 0; i < n/kVecLen; i++){
+        	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
-			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/kVecLen) + i] ); 
-			for(int d = 0; d < kVecLen; d++){
+			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/DataCHLen) + i] ); 
+			for(int d = 0; d < DataCHLen; d++){
 #pragma HLS UNROLL
-				dramrd_streams[(i % GROUP_CH_NUM)*kVecLen+d].write( data[d] );			
+				dramrd_streams[(i % CORE_DRAM_WIDTH_RATIO)*DataCHLen+d].write( data[d] );			
 			}
 		}	
 	}
@@ -762,14 +762,14 @@ void write_dist_m(tapa::ostreams<Data, 2*BU*GROUP_CH_NUM> & dramwr_streams, tapa
 void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dramwr_streams, int sample_num){
 
 	for(int sample = 0; sample < sample_num/CH; sample++){
-        	for(int i = 0; i < n/kVecLen; i++){
+        	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data;
-			for(int d = 0; d < kVecLen; d++){
+			for(int d = 0; d < DataCHLen; d++){
 #pragma HLS UNROLL
-				data[d] = dramwr_streams[(i % GROUP_CH_NUM)*kVecLen+d].read();			
+				data[d] = dramwr_streams[(i % CORE_DRAM_WIDTH_RATIO)*DataCHLen+d].read();			
 			}
-            		y[sample * (n/kVecLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
+            		y[sample * (n/DataCHLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
 		}	
 	}
 }
@@ -779,21 +779,22 @@ void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dram
 void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE_NUM> & dramrd_streams, int sample_num){
 
 	for(int sample = 0; sample < sample_num/CH; sample++){
-	       	for(int i = 0; i < n/kVecLen; i++){
+	       	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
-			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/kVecLen) + i] );
+			DataVec data = tapa::bit_cast<DataVec>( x[sample * (n/DataCHLen) + i] );
 			dramrd_streams[sample%GROUP_CORE_NUM].write(data);
 		}
 	}
 }
 
 void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o){
+
+READ_DIST_S_LOOP:
 	for(;;){
-	        //for(int i = 0; i < n/kVecLen; i++){
-#pragma HLS PIPELINE II = GROUP_CORE_NUM
+#pragma HLS PIPELINE II = DRAM_CORE_WIDTH_RATIO
 		if( !dramrd_stream.empty() ){
 			DataVec data = dramrd_stream.read();
-			for(int core = 0; core < GROUP_CORE_NUM; core++){
+			for(int core = 0; core < DRAM_CORE_WIDTH_RATIO; core++){
 				for(int d = 0; d < BU; d++){
 #pragma HLS UNROLL	
 					// core_istreams_e[d].write( data[core*2*BU+d] );
@@ -806,7 +807,6 @@ void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, BU
 				}
 			}
 		}
-		//}
 	}
 }
 
@@ -814,9 +814,9 @@ void write_reshape_s(tapa::ostream<DataVec> & dramwr_stream, tapa::istreams<Data
 
 WRITE_RESHAPE_S_LOOP:
 	for(;;){
-#pragma HLS PIPELINE II = GROUP_CORE_NUM 
+#pragma HLS PIPELINE II = DRAM_CORE_WIDTH_RATIO
 		DataVec data;
-		for(int c = 0; c < GROUP_CORE_NUM; c++){
+		for(int c = 0; c < DRAM_CORE_WIDTH_RATIO; c++){
 			for(int d = 0; d < BU; d++){
 				data[c*2*BU+2*d] = static_cast<HostData>( core_ostreams_e[d].read() );
 			}
@@ -831,10 +831,10 @@ WRITE_RESHAPE_S_LOOP:
 void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_CORE_NUM> & dramwr_streams, int sample_num){
 
 	for(int sample = 0; sample < sample_num/CH; sample++){
-	       	for(int i = 0; i < n/kVecLen; i++){
+	       	for(int i = 0; i < n/DataCHLen; i++){
 #pragma HLS PIPELINE II = 1
 			DataVec data = dramwr_streams[sample%GROUP_CORE_NUM].read();
-            		y[sample * (n/kVecLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
+            		y[sample * (n/DataCHLen) + i] =  tapa::bit_cast<bits<DataVec>>(data);
 		}
 	}
 }

@@ -37,11 +37,10 @@ Number of NTT cores: 4
 Creating a new folder: N1024_BU8_CH4
 ```
 
-## How to use MAKEFILE
-Actions (TARGET = sw, xo, hw)
-1) all: Host compilation [tapa g++] / Synthesis into RTL [tapa compile] / Bitstream generation [v++]
-2) run: sw simulation / RTL simulation / onboard
+## Compilation & Execution 
 
+You can use the Makefile for compilation & execution.
+We recommend that you use Rapidstream to achieve higher clock frequency, but you could only use the traditional Vitis flow.
 
 HOST Compilation
 ```bash
@@ -51,7 +50,7 @@ Synthesize and generate xo file
 ```bash
 make all TARGET=xo
 ```
-Generate bitstream from xo file (no Rapidstream)
+Generate bitstream from xo file (Vitis only, no Rapidstream)
 ```bash
 make all TARGET=hw
 ```

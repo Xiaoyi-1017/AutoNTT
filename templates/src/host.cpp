@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
 
     // Generate twiddle factors
     std::cout << "n: " << n << " mod: " << mod << std::endl;
-    std::cout << "Number OF samples: " << ADJ_SAMPLE_NUM << " (adjusted from " << SAMPLE_NUM << ")" << std::endl; 
+    std::cout << "Number of samples: " << ADJ_SAMPLE_NUM << " (adjusted from " << SAMPLE_NUM << ")" << std::endl; 
     std::cout << "Number of NTT cores: " << NUM_CORE << std::endl;
     std::cout << "Number of butterfly units per NTT core: " << BU << std::endl; 
     std::cout << "Number of input and output DRAM channels: " << CH << std::endl;

@@ -7,15 +7,15 @@
 #include "ap_int.h"
 #include <tapa.h>
 
-
 constexpr int K = {K};
 
 using Data = ap_uint<K>;// Data = ap_uint<14>
 using HostData = {DATA_FORMAT};
 
-constexpr int kVecLen = 64 / {DATA_BSIZE}; // / sizeof(Data)
+constexpr int DataCHLen = 64 / {DATA_BSIZE}; // 64 / sizeof(Data)
+constexpr int EffDataCHLen = {EffDataCHLen}; 
 
-using DataVec = tapa::vec_t<HostData, kVecLen>;
+using DataVec = tapa::vec_t<HostData, DataCHLen>;
 
 template <typename T>
 using bits = ap_uint<tapa::widthof<T>()>;
@@ -23,7 +23,6 @@ using bits = ap_uint<tapa::widthof<T>()>;
 constexpr int log2(int x) {
     return (x <= 1) ? 0 : 1 + log2(x / 2);
 }
-
 
 #define MOD {MOD}
 
@@ -36,9 +35,6 @@ constexpr int log2(int x) {
 #else
     #error "Unsupported mod value. Please define MOD as 12289 or 8380417."
 #endif
-
-
-
 
 // Number of coefficients
 constexpr int n = {N};
@@ -57,23 +53,21 @@ constexpr int num_temp_stage = log2N - (log2BU + 1);
 
 constexpr int CH = {CH};
 
-constexpr int NUM_CORE = kVecLen*CH / (2*BU);
+constexpr int NUM_CORE = EffDataCHLen*CH / (2*BU);
 
-constexpr int NUM_CH_PER_CORE = (2*BU) / kVecLen; 
-constexpr int NUM_CORE_PER_CH = kVecLen / (2*BU);
+constexpr int GROUP_NUM = {GROUP_NUM}; //std::min(CH, NUM_CORE);
+#define GROUP_CH_NUM {GROUP_CH_NUM}
+//constexpr int GROUP_CH_NUM = CH / GROUP_NUM;
+constexpr int GROUP_CORE_NUM = NUM_CORE / GROUP_NUM;
 
-#if {MCH} //(2*BU) > kVecLen
+#if {MCH} // GROUP_CH_NUM > 1
 #define MCH
 #endif
 
-constexpr int GROUP_NUM = {GROUP_NUM}; //std::min(CH, CH * kVecLen / (2*BU));
-#define GROUP_CH_NUM {GROUP_CH_NUM}
-//constexpr int GROUP_CH_NUM = CH / GROUP_NUM;
-constexpr int log_GROUP_CH_NUM = log2(GROUP_CH_NUM);
-constexpr int GROUP_CORE_NUM = kVecLen*CH / (2*BU*GROUP_NUM);
-constexpr int log_GROUP_CORE_NUM = log2(GROUP_CORE_NUM);
-using ReshapeDataVec = tapa::vec_t<Data, 2*BU>;
-constexpr int SAMPLE_FIFO_DEPTH_S = n / kVecLen;
+constexpr int DRAM_CORE_WIDTH_RATIO = DataCHLen / (2*BU);
+constexpr int CORE_DRAM_WIDTH_RATIO = (2*BU) / DataCHLen;
+
+constexpr int SAMPLE_FIFO_DEPTH_S = n / DataCHLen;
 constexpr int SAMPLE_FIFO_DEPTH_M = n / (2*BU);
 
 constexpr HostData psi = {PSI};

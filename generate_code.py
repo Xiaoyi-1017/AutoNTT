@@ -35,9 +35,15 @@ def check_q_and_data_length(q):
     return K, bits, data_format
 
 
+def round_to_nearest_power_of_2(n):
+    if n < 1:
+        return 1
 
-def is_memory_config_realizable(num_channels, vec_len, coeff_parallel):
-    return (num_channels * vec_len) % coeff_parallel == 0
+    power_low = 2 ** math.floor(math.log2(n))
+    power_high = 2 ** math.ceil(math.log2(n))
+
+    return power_low if (n - power_low) < (power_high - n) else power_high
+
 
 def generate_ini(ch, folder):
     if not (1 <= ch <= 16):
@@ -75,21 +81,22 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     log2N = int(math.log2(n))
     log2BU = int(math.log2(BU))
 
-    MCH = int((2*BU) > 64 / (bits/8))
     DATA_BSIZE = int(bits/8)
-    kVecLen = int(64 / DATA_BSIZE)
-    GROUP_NUM = int(min(CH, CH * kVecLen / (2*BU)))
-    GROUP_CH_NUM = int(CH / GROUP_NUM)
+    DataCHLen = int(64 / DATA_BSIZE)
 
-    
+    DRAM_RATE = 0.5
+    EffDataCHLen = round_to_nearest_power_of_2(DataCHLen*DRAM_RATE)
+
+    NUM_CORE = CH * EffDataCHLen / (2*BU)
+    GROUP_NUM = int(min(CH, NUM_CORE))
+    GROUP_CH_NUM = int(CH / GROUP_NUM)
+    MCH = int(GROUP_CH_NUM > 1)
 
     # it takes too much to calculate psi for large q (3221225473)
     psi = None
-
     psi_dict = {12289: {64: 140, 128: 8340, 256: 3400, 512: 1987, 1024: 1945}, 
                 8380417: {64: 3241972, 128: 1736313, 256: 1921994, 512: 550930, 1024: 1028169},
                 3221225473: {64: 1292405718, 128: 1262731197, 256 : 764652596, 512 : 1365964089, 1024: 1168849724} }
-    
     
     if mod in psi_dict:
         if n in psi_dict[mod]:
@@ -103,13 +110,11 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
 
     tw_factors = twiddle_generator_BR(mod, psi, n)
 
-
     # template_file = f"./{folder}/src/ntt.h"
     target_file = os.path.join(folder, "src/ntt.h")
 
     with open(target_file, "r") as file:
         header_content = file.read()
-
     
     header_content = header_content.replace("{K}", str(K))
     header_content = header_content.replace("{DATA_FORMAT}", data_format)
@@ -121,6 +126,7 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     header_content = header_content.replace("{logDEPTH}", str(logDEPTH))
     header_content = header_content.replace("{CH}", str(CH))
     header_content = header_content.replace("{MCH}", str(MCH))
+    header_content = header_content.replace("{EffDataCHLen}", str(EffDataCHLen))
     header_content = header_content.replace("{DATA_BSIZE}", str(DATA_BSIZE))
     header_content = header_content.replace("{GROUP_NUM}", str(GROUP_NUM))
     header_content = header_content.replace("{GROUP_CH_NUM}", str(GROUP_CH_NUM))
@@ -161,47 +167,44 @@ def main():
     # bits = args.bits
     BU = args.BU
     CH = args.CH
-
     
     K, bits, data_format = check_q_and_data_length(mod)    
 
-
     veclen = 512 // bits
 
-    
-    if is_memory_config_realizable(CH, veclen, 2*BU):
-        NUM_NTT_CORES = CH * veclen // (2 * BU)
-
-        print(f"Values used -> N: {N}, q: {mod}, HostData: {data_format}, BU: {BU}, CH: {CH}, veclen: {veclen}")
-        print(f"Number of NTT cores: {NUM_NTT_CORES}")
-
-        # Create new folder
-        folder_name = f"N{N}_BU{BU}_CH{CH}_{mod}"
-        if os.path.exists(folder_name):
-            print(f"Folder exists: {folder_name}. No folder created.")
-        else:
-            print(f"Creating a new folder: {folder_name}")
-            os.makedirs(folder_name)
-
-            # Copy all existing files to the new folder
-            source_folder = "./templates"
-            if os.path.exists(source_folder):
-                for item in os.listdir(source_folder):
-                    s = os.path.join(source_folder, item)
-                    d = os.path.join(folder_name, item)
-                    if os.path.isdir(s):
-                        shutil.copytree(s, d, dirs_exist_ok=True)
-                    else:
-                        shutil.copy2(s, d)
-
-            # Generate new files in the folder
-            generate_ini(CH, folder_name)
-            generate_header(N, mod, K, bits, data_format, BU, CH, folder_name)
-            generate_makefile(CH, folder_name)
-
-    else:
-        print(f"NUM_NTT_CORES is not feasible.")
+    if (CH*veclen) % (2*BU) != 0:
+        print(f"{CH} * {veclen} should be divisible by {2 * BU}. Design not feasible.")
         return
 
+    NUM_NTT_CORES = CH * veclen // (2 * BU)
+
+    print(f"Values used -> N: {N}, q: {mod}, HostData: {data_format}, BU: {BU}, CH: {CH}, veclen: {veclen}")
+    print(f"Number of NTT cores: {NUM_NTT_CORES}")
+
+    # Create new folder
+    folder_name = f"N{N}_BU{BU}_CH{CH}_q{mod}"
+    if os.path.exists(folder_name):
+        print(f"Folder exists: {folder_name}. No folder created.")
+    else:
+        print(f"Creating a new folder: {folder_name}")
+        os.makedirs(folder_name)
+
+        # Copy all existing files to the new folder
+        source_folder = "./templates"
+        if os.path.exists(source_folder):
+            for item in os.listdir(source_folder):
+                s = os.path.join(source_folder, item)
+                d = os.path.join(folder_name, item)
+                if os.path.isdir(s):
+                    shutil.copytree(s, d, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(s, d)
+
+        # Generate new files in the folder
+        generate_ini(CH, folder_name)
+        generate_header(N, mod, K, bits, data_format, BU, CH, folder_name)
+        generate_makefile(CH, folder_name)
+
+ 
 if __name__ == "__main__":
     main()
