@@ -6,24 +6,26 @@
 #include <omp.h>
 #include "ntt.h"
 
-
 int bit_reverse(int i){
 	ap_uint<log2N> x = (ap_uint<log2N>) i;
 	ap_uint<log2N> reversed_idx = x.reverse();
 	return (int) reversed_idx;
 }
 
-int mod_power(int x, int exp, int mod){
-    int result = 1;
+/* Changed to prevent overflow */
+int mod_power(HostData x, int exp, HostData mod){
+    uint64_t result = 1;
     for(int i = 0; i < exp; i++){
         result *= x;
         result %= mod;
     }
-    return result;
+    
+    HostData result_output = static_cast<HostData>(result);
 
+    return result_output;
 }
 
-void get_omega_mat(int Omega[n][n], int mod, int psi) {
+void get_omega_mat(HostData Omega[n][n], HostData mod, HostData psi) {
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             int exp = (2*(i*j)+j) % (2*n);
@@ -32,37 +34,40 @@ void get_omega_mat(int Omega[n][n], int mod, int psi) {
     }
 }
 
+/* Changed to prevent overflow */
 
-void sw_ntt(std::vector<Data, tapa::aligned_allocator<Data>> A, std::vector<Data, tapa::aligned_allocator<Data>> &out_sw, int psi, int q, const int SAMPLE_NUM){
-  int omega[n][n];
-  get_omega_mat(omega, mod, psi);
+void sw_ntt(std::vector<HostData, tapa::aligned_allocator<HostData>> A, std::vector<HostData, tapa::aligned_allocator<HostData>> &out_sw, 
+            HostData psi, HostData q, const int SAMPLES){
+  
+  HostData omega[n][n];
+  get_omega_mat(omega, q, psi);
+  
   #pragma omp parallel
 	{
 		int tid = omp_get_thread_num();
 		if( tid == 0 ){
 			int nthreads = omp_get_num_threads();
-			// std::cout << "Running OpenMP with " << nthreads << " threads...\n";
 		}
 	}
   #pragma omp parallel for
-  for(int i = 0; i < SAMPLE_NUM; i++){
+  for(int i = 0; i < SAMPLES; i++){
     for (int j = 0; j < n; ++j) {
-        int sum = 0;
+        uint64_t sum = 0;
         for (int k = 0; k < n; ++k) {
-            sum = (sum + omega[j][k] * A[n*i+k]) % q;
+            sum = sum + static_cast<uint64_t>(omega[j][k]) * static_cast<uint64_t>(A[n*i+k]); 
+            sum %= q;
         }
-        out_sw[n*i + j] = sum;
+        out_sw[n*i + j] = static_cast<HostData>(sum);
     }
   }
 }
 
-void bit_reverse_hw_out(std::vector<Data, tapa::aligned_allocator<Data>> out_hw, std::vector<Data, tapa::aligned_allocator<Data>> &out_hw_BR, const int SAMPLE_NUM){
+void bit_reverse_hw_out(std::vector<HostData, tapa::aligned_allocator<HostData>> out_hw, std::vector<HostData, tapa::aligned_allocator<HostData>> &out_hw_BR, const int SAMPLE_NUM){
 #pragma omp parallel 
 {
     int tid = omp_get_thread_num();
     if( tid == 0 ){
             int nthreads = omp_get_num_threads();
-            // std::cout << "Running OpenMP with " << nthreads << " threads...\n";
     }
 }
 #pragma omp parallel for
@@ -74,8 +79,8 @@ void bit_reverse_hw_out(std::vector<Data, tapa::aligned_allocator<Data>> out_hw,
     }
 }
 
-void copy_input(std::vector<Data, tapa::aligned_allocator<Data>> input, 
-		std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> &X, int SAMPLE_NUM){
+void copy_input(std::vector<HostData, tapa::aligned_allocator<HostData>> input, 
+		std::vector<std::vector<HostData, tapa::aligned_allocator<HostData> >, std::allocator<std::vector<HostData, tapa::aligned_allocator<HostData> > >> &X, int SAMPLE_NUM){
 
 	for(int i = 0; i < SAMPLE_NUM; i++){
 		for(int j = 0; j < n; j++){
@@ -85,8 +90,8 @@ void copy_input(std::vector<Data, tapa::aligned_allocator<Data>> input,
 	}
 }
 
-void copy_output(std::vector<std::vector<int, tapa::aligned_allocator<int> >, std::allocator<std::vector<int, tapa::aligned_allocator<int> > >> Y, 
-		std::vector<Data, tapa::aligned_allocator<Data>> &out_hw, int SAMPLE_NUM){
+void copy_output(std::vector<std::vector<HostData, tapa::aligned_allocator<HostData> >, std::allocator<std::vector<HostData, tapa::aligned_allocator<HostData> > >> Y, 
+		std::vector<HostData, tapa::aligned_allocator<HostData>> &out_hw, int SAMPLE_NUM){
 	for(int i = 0; i < SAMPLE_NUM; i++){
 		for(int j = 0; j < n; j++){
 			out_hw[i*n + j] = Y[i%CH][(i/CH)*n+j];
@@ -106,20 +111,21 @@ int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, /*remove_flags=*/true);
 
     const int SAMPLE_NUM = argc > 1 ? atoll(argv[1]) : 1000;
-
+    
+    const HostData mod = MOD;
     const int N = n;
 
     const int ADJ_FACTOR = CH > NUM_CORE ? CH : NUM_CORE;
     const int ADJ_SAMPLE_NUM = ((SAMPLE_NUM - 1) / ADJ_FACTOR + 1) * ADJ_FACTOR;
 
-    std::vector<Data, tapa::aligned_allocator<Data>> input(n*ADJ_SAMPLE_NUM);
+    std::vector<HostData, tapa::aligned_allocator<HostData>> input(n*ADJ_SAMPLE_NUM);
     
-    std::vector<Data, tapa::aligned_allocator<Data>> out_sw(n*ADJ_SAMPLE_NUM);
-    std::vector<Data, tapa::aligned_allocator<Data>> out_hw(n*ADJ_SAMPLE_NUM);
-    std::vector<Data, tapa::aligned_allocator<Data>> out_hw_BR(n*ADJ_SAMPLE_NUM);
+    std::vector<HostData, tapa::aligned_allocator<HostData>> out_sw(n*ADJ_SAMPLE_NUM);
+    std::vector<HostData, tapa::aligned_allocator<HostData>> out_hw(n*ADJ_SAMPLE_NUM);
+    std::vector<HostData, tapa::aligned_allocator<HostData>> out_hw_BR(n*ADJ_SAMPLE_NUM);
 
-    std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> X(CH);
-    std::vector<std::vector<Data, tapa::aligned_allocator<Data>>> Y(CH);
+    std::vector<std::vector<HostData, tapa::aligned_allocator<HostData>>> X(CH);
+    std::vector<std::vector<HostData, tapa::aligned_allocator<HostData>>> Y(CH);
 
 
 
@@ -135,7 +141,7 @@ int main(int argc, char* argv[]) {
   
     srand(time(NULL));
 
-    // Create the test data 
+    // Create the test HostData 
     for(int i = 0; i < ADJ_SAMPLE_NUM; i++){
       for(int j = 0; j < n; j++){
         //   input[i*n + j] = rand() % mod;
@@ -146,8 +152,8 @@ int main(int argc, char* argv[]) {
     // Resize each channel into appropriate size
     int CHANNEL_SIZE = n*ADJ_SAMPLE_NUM/CH;
 
-    if( CHANNEL_SIZE * sizeof(Data) > 256 * 1024 * 1024 ){
-        std::cout << "Error: Data size of each channel (" << CHANNEL_SIZE * sizeof(Data) << ") exceeds 256 MB" << std::endl;
+    if( CHANNEL_SIZE * sizeof(HostData) > 256 * 1024 * 1024 ){
+        std::cout << "Error: HostData size of each channel (" << CHANNEL_SIZE * sizeof(HostData) << ") exceeds 256 MB" << std::endl;
         exit(1);
     }  
 
@@ -158,7 +164,7 @@ int main(int argc, char* argv[]) {
 
     copy_input(input, X, ADJ_SAMPLE_NUM);
     
-    std::cout << "Test data generation DONE" << std::endl;
+    std::cout << "Test HostData generation DONE" << std::endl;
 
     sw_ntt(input, out_sw, psi, mod, ADJ_SAMPLE_NUM);
 
@@ -166,8 +172,8 @@ int main(int argc, char* argv[]) {
 
     int64_t kernel_time_ns =
       tapa::invoke(ntt, FLAGS_bitstream,
-                   tapa::read_only_mmaps<Data, CH>(X).reinterpret<bits<DataVec>>(),
-                   tapa::write_only_mmaps<Data, CH>(Y).reinterpret<bits<DataVec>>(), 
+                   tapa::read_only_mmaps<HostData, CH>(X).reinterpret<bits<DataVec>>(),
+                   tapa::write_only_mmaps<HostData, CH>(Y).reinterpret<bits<DataVec>>(), 
 		ADJ_SAMPLE_NUM);
 
 
@@ -176,7 +182,7 @@ int main(int argc, char* argv[]) {
     //std::cout << "kernel time: " << kernel_time_ns * 1e-3 << " us" << std::endl;
 
     std::cout << "Kernel throughput: " << (double)ADJ_SAMPLE_NUM / kernel_time_ns * 1e3 << " Msamples/s" << std::endl; 
-    std::cout << "Eff BW per HBM channel: " << (double)CHANNEL_SIZE*sizeof(Data) / kernel_time_ns << " GB/s" << std::endl; 
+    std::cout << "Eff BW per HBM channel: " << (double)CHANNEL_SIZE*sizeof(HostData) / kernel_time_ns << " GB/s" << std::endl; 
     
     std::cout << "Copying output ...\n";
   

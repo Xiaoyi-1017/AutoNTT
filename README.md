@@ -21,8 +21,7 @@ Please use generate_code.py to automatically generate an NTT project.
 | Argument | Description | Supported Values | Default |
 |----------|-------------|-----------------|---------|
 | **N** | Transform size (polynomial degree) | 256, 512, 1024 | 1024 |
-| **q** | Prime modulus | 3329, 8380417, 12289 | 12289 |
-| **bits** | Bit length of coefficients | 16, 32 | 32 |
+| **q** | Prime modulus | 12289, 8380417, 3221225473 | 12289 |
 | **BU** | Number of butterfly units per stage | 1, 2, 4, 8, 16, 32 | 8 |
 | **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8 | 4 |
 
@@ -81,3 +80,8 @@ make run TARGET={sw | xo | hw | hw-opt} NUM=10000
 - **gen_config.py**: Fixed port_pre_assignments
 - **Makefile**: Rearranged directories for rapidstream-tapaopt
 
+### 2025/02/18
+#### Modified
+- **Added support for multiple modulo(12289, 8380417, 3221225473)**: Modular reduction and butterfly unit modules are modified.
+- **separate Data types for both host and kernel**: Outside of the kernel: Standard C/C++ data types / Inside the kernel: ap_uint`<K>`.
+- **generate_code.py**: The bit length and data type of data are determined based on the value of q.

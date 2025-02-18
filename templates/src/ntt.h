@@ -7,10 +7,15 @@
 #include "ap_int.h"
 #include <tapa.h>
 
-using Data = {DATA_FORMAT};
+
+constexpr int K = {K};
+
+using Data = ap_uint<K>;// Data = ap_uint<14>
+using HostData = {DATA_FORMAT};
+
 constexpr int kVecLen = 64 / {DATA_BSIZE}; // / sizeof(Data)
 
-using DataVec = tapa::vec_t<Data, kVecLen>;
+using DataVec = tapa::vec_t<HostData, kVecLen>;
 
 template <typename T>
 using bits = ap_uint<tapa::widthof<T>()>;
@@ -19,7 +24,21 @@ constexpr int log2(int x) {
     return (x <= 1) ? 0 : 1 + log2(x / 2);
 }
 
-constexpr int mod = {MOD};
+
+#define MOD {MOD}
+
+#if MOD == 12289
+    #define USE_Q12289
+#elif MOD == 8380417
+    #define USE_Q8380417
+#elif MOD == 3221225473
+    #define USE_Q3221225473
+#else
+    #error "Unsupported mod value. Please define MOD as 12289 or 8380417."
+#endif
+
+
+
 
 // Number of coefficients
 constexpr int n = {N};
@@ -57,9 +76,11 @@ using ReshapeDataVec = tapa::vec_t<Data, 2*BU>;
 constexpr int SAMPLE_FIFO_DEPTH_S = n / kVecLen;
 constexpr int SAMPLE_FIFO_DEPTH_M = n / (2*BU);
 
-// Bit reversed array of twiddle factors
-constexpr int tw_factors[n] = {{TW_FACTORS}};
+constexpr HostData psi = {PSI};
 
-constexpr int psi = tw_factors[n/2];
+// Bit reversed array of twiddle factors
+const Data tw_factors[n] = {{TW_FACTORS}};
+
+
 
 #endif // NTT_H

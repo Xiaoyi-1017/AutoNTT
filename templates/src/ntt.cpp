@@ -1,10 +1,16 @@
 #include <iostream>
 #include "ntt.h"
 
-void reduce(int x, int &remainder){
+
+#ifdef USE_Q12289
+void reduce(Data coeff, Data tw_factor, Data &remainder){
 #pragma HLS INLINE
-	ap_uint <16> q = 12289;
-	ap_uint <32> z = static_cast<ap_uint<32>>(x);
+	ap_uint <14> q = MOD;
+	
+	ap_uint<14> odd_cast = static_cast<ap_uint<14>>(coeff);
+    ap_uint<14> tw_factor_cast = static_cast<ap_uint<14>>(tw_factor);
+	ap_uint<28> z = odd_cast*tw_factor_cast;
+
 
 	// max(c) = 19 (maximum 5 bits are needed)
 	ap_uint<5> c = z.range(27, 26) + z.range(25, 24) + z.range(23, 22)
@@ -26,36 +32,131 @@ void reduce(int x, int &remainder){
 	ap_uint<14> g = z.range(13, 0);
 
 	// Calculate y
+	ap_uint<16> y = f + g - q*(g > q);
+
+	y = y- q*(y > q);
+
+	y = y + q * (y < d) - d;
+
+	remainder =  static_cast<Data>(y);
+}
+
+
+#elif defined(USE_Q8380417)
+
+void reduce(Data coeff, Data tw_factor, Data& remainder){
+ #pragma HLS INLINE
+	ap_uint<23> q = MOD;
+
+    ap_uint<23> odd_cast = static_cast<ap_uint<23>>(coeff);
+    ap_uint<23> tw_factor_cast = static_cast<ap_uint<23>>(tw_factor);
+
+
+	ap_uint <46> z = odd_cast*tw_factor_cast;
+
+	// c = z[45:43} + z[42:33} + z[32:23], max(c) = 2052 (12-bit integer)
+	ap_uint<12> c = z.range(45, 43) + z.range(42, 33) + z.range(32, 23);
+	// max(d) = 8380415 (23-bit integer)
+	ap_uint<23> d = z.range(45, 43) + z.range(45, 33) + z.range(45, 23);
+
+	// max(e) = 1024 (max 11 bits are needed)
+	ap_uint<11> e = c.range(11, 10) + c.range(9, 0);
+
+
+    // f is less than q
+	ap_uint<23> f = (ap_uint<23>) (e[10] + e.range(9, 0)) << 13;
+    f = f -(e[10]+ c.range(11, 10));
+
+	// g could be bigger than q (23-bit integer) 
+	ap_uint<23> g = z.range(22, 0);
+
+	// Calculate y
 	ap_uint<32> y = f + g - q*(g > q);
 
 	y = y- q*(y > q);
 
 	y = y + q * (y < d) - d;
 
-	remainder =  static_cast<int>(y);
+	remainder =  static_cast<Data>(y);
 }
 
-void butterfly(int even, int odd, int tw_factor, int *out_even, int* out_odd){
+#elif defined(USE_Q3221225473)
+void reduce(Data coeff, Data tw_factor, Data& remainder){
 #pragma HLS INLINE
-	int multiplied = odd * tw_factor;
-	int t; reduce(multiplied, t);
+	ap_uint<32> q = MOD;
 
-	// Cooley-Tukey butterfly
-	int coeff_odd = even - t;
-	int coeff_even = even + t;
+	ap_uint<32> odd_cast = static_cast<ap_uint<32>>(coeff);
+	ap_uint<32> tw_factor_cast = static_cast<ap_uint<32>>(tw_factor);
 
-	// Save them to dereferenced variables out_odd, and out_even
-	*out_odd = (coeff_odd < 0) ? (coeff_odd + mod) : coeff_odd;
-	*out_even = (coeff_even >= mod) ? (coeff_even - mod) : coeff_even;
+	ap_uint <64> z = odd_cast*tw_factor_cast;
+	
+	// max(c) = 46 (6-bit integer)
+	ap_uint<6> c = 	z.range(63, 62) + z.range(61, 60) + z.range(59, 58) + z.range(57, 56)
+					+ z.range(55, 54) + z.range(53, 52) + z.range(51, 50) + z.range(49, 48)
+					+ z.range(47, 46) + z.range(45, 44) + z.range(43, 42) + z.range(41, 40)
+					+ z.range(39, 38) + z.range(37, 36) + z.range(35, 34) + z.range(33, 32);
+	
+	// max(d) = 8380415 (32-bit integer)
+	ap_uint<32> d = z.range(63, 62) + z.range(63, 60) + z.range(63, 58) + z.range(63, 56)
+					+ z.range(63, 54) + z.range(63, 52) + z.range(63, 50) + z.range(63, 48)
+					+ z.range(63, 46) + z.range(63, 44) + z.range(63, 42) + z.range(63, 40)
+					+ z.range(63, 38) + z.range(63, 36) + z.range(63, 34) + z.range(63, 32);
+
+	// max(e) = 7 (max 3 bits are needed)
+	ap_uint<3> e = c.range(5, 4) + c.range(3, 2) + c.range(1, 0);
+
+	// max(f) = 4 (3-bit integer)
+	ap_uint<3> f = e[2] + e.range(1, 0);
+
+	// max(f[2] + f.range(1, 0)) = 3 -> g is less than q
+	ap_uint<32> g = (ap_uint<32>) (f[2] + f.range(1, 0)) << 30 ;
+	
+	g = g -(f[2] + e[2] + c.range(5, 4) + c.range(5, 2));
+
+	// h could be bigger than q (23-bit integer) 
+	ap_uint<32> h = z.range(31, 0);
+
+	// Calculate y
+	ap_uint<33> y = g + h - q*(h > q);
+
+	y = y- q*(y > q);
+
+	y = y + q * (y < d) - d;
+	
+	remainder =  static_cast<Data>(y);
+}
+#else
+#error "You must define either USE_Q12289 or USE_Q8380417"
+#endif
+
+
+
+void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_odd) {
+    #pragma HLS INLINE
+    
+	ap_uint<K+2> mod = MOD;
+
+    Data reduced; reduce(odd, tw_factor, reduced);
+
+	ap_int<K+2> coeff_even  = (ap_int<K+2>) even + (ap_int<K+2>) reduced;
+	ap_int<K+2> coeff_odd  = (ap_int<K+2>) even - (ap_int<K+2>) reduced;
+    
+	ap_int<K+2> out0 = (coeff_even >= mod) ? (ap_int<K+2>) (coeff_even - mod): coeff_even;
+	ap_int<K+2> out1 = (coeff_odd < 0)    ? 	(ap_int<K+2>) (coeff_odd + mod) : coeff_odd;
+
+    // Cast the results to the correct width so that both branches are the same type
+    *out_even = static_cast<Data>(out0);
+    *out_odd  = static_cast<Data>(out1);
 }
 
-void bf_unit(int id, int stage, tapa::istream<int>& input0, tapa::istream<int>& input1,
-		tapa::ostream<int>& output0, tapa::ostream<int>& output1, int SAMPLES){
+
+void bf_unit(int id, int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
+		tapa::ostream<Data>& output0, tapa::ostream<Data>& output1, int SAMPLES){
 
 	int stride = n >> (stage + 1); 
 
-	int even, odd;
-	int out_even, out_odd;
+	Data even, odd;
+	Data out_even, out_odd;
 	ap_uint<logDEPTH> read_i = 0;
 
 BF_LOOP:
@@ -204,7 +305,7 @@ void spatial_stages(tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data
 		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1, int SAMPLES){
 
 	const int num_of_stages = log2BU + 1;
-	int mem[num_of_stages+1][WIDTH];
+	Data mem[num_of_stages+1][WIDTH];
 	ap_uint<logDEPTH> i = 0;
 
 NTT_SPATIAL_LOOP:
@@ -243,7 +344,7 @@ STAGE_LOOP:
 BUTTERFLY_LOOP:
 				for(int idx = 0; idx < BU; idx++){
 #pragma HLS unroll
-					int out_even; int out_odd;
+					Data out_even, out_odd;
 
 					int j = idx >> shift;
 					int k = idx & mask;
@@ -694,12 +795,14 @@ void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, BU
 			DataVec data = dramrd_stream.read();
 			for(int core = 0; core < GROUP_CORE_NUM; core++){
 				for(int d = 0; d < BU; d++){
-#pragma HLS UNROLL
-					core_istreams_e[d].write( data[core*2*BU+d] );			
+#pragma HLS UNROLL	
+					// core_istreams_e[d].write( data[core*2*BU+d] );
+					core_istreams_e[d].write( static_cast<Data>(data[core*2*BU+d]) );
 				}
 				for(int d = 0; d < BU; d++){
 #pragma HLS UNROLL
-					core_istreams_o[d].write( data[core*2*BU+BU+d] );			
+					// core_istreams_o[d].write( data[core*2*BU+BU+d] );			
+					core_istreams_o[d].write( static_cast<Data>( data[core*2*BU+BU+d] ) );
 				}
 			}
 		}
@@ -715,10 +818,10 @@ WRITE_RESHAPE_S_LOOP:
 		DataVec data;
 		for(int c = 0; c < GROUP_CORE_NUM; c++){
 			for(int d = 0; d < BU; d++){
-				data[c*2*BU+2*d] = core_ostreams_e[d].read();
+				data[c*2*BU+2*d] = static_cast<HostData>( core_ostreams_e[d].read() );
 			}
 			for(int d = 0; d < BU; d++){
-				data[c*2*BU+2*d+1] = core_ostreams_o[d].read();
+				data[c*2*BU+2*d+1] = static_cast<HostData>( core_ostreams_o[d].read() );
 			}
 		}
 		dramwr_stream.write(data);
