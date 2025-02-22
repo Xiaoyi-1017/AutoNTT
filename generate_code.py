@@ -161,8 +161,8 @@ def main():
     parser.add_argument("-N", type=int, default=1024, help="The size of N.")
     parser.add_argument("-q", type=int, default=12289, help="Declare appropriate q")
     # parser.add_argument("-bits", type=int, default=32, help="Coefficient bit-width")
-    parser.add_argument("-BU", type=int, default=8, help="The size of BU.")
-    parser.add_argument("-CH", type=int, default=4, help="The number of memory channels (input) ")
+    parser.add_argument("-BU", type=int, default=16, help="The size of BU.")
+    parser.add_argument("-CH", type=int, default=8, help="The number of memory channels (input) ")
 
     args = parser.parse_args()
 

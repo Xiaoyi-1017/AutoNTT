@@ -1,16 +1,16 @@
 #include <iostream>
 #include "ntt.h"
 
-
-#ifdef USE_Q12289
 void reduce(Data coeff, Data tw_factor, Data &remainder){
 #pragma HLS INLINE
-	ap_uint <14> q = MOD;
-	
-	ap_uint<14> odd_cast = static_cast<ap_uint<14>>(coeff);
-    ap_uint<14> tw_factor_cast = static_cast<ap_uint<14>>(tw_factor);
-	ap_uint<28> z = odd_cast*tw_factor_cast;
 
+	Data q = MOD;
+	Data odd_cast = coeff;
+	Data tw_factor_cast = tw_factor;
+
+	ap_uint<2*K> z = (ap_uint<2*K>)odd_cast * (ap_uint<2*K>)tw_factor_cast;
+
+#ifdef USE_Q12289 //Data is 14b
 
 	// max(c) = 19 (maximum 5 bits are needed)
 	ap_uint<5> c = z.range(27, 26) + z.range(25, 24) + z.range(23, 22)
@@ -28,31 +28,12 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 	ap_uint<16> f = (ap_uint<16>) (e[2] + e.range(1, 0)) << 12;
 	f = f -(e[2]+ c[4] + c.range(4, 2));
 
-
 	ap_uint<14> g = z.range(13, 0);
 
 	// Calculate y
 	ap_uint<16> y = f + g - q*(g > q);
 
-	y = y- q*(y > q);
-
-	y = y + q * (y < d) - d;
-
-	remainder =  static_cast<Data>(y);
-}
-
-
-#elif defined(USE_Q8380417)
-
-void reduce(Data coeff, Data tw_factor, Data& remainder){
- #pragma HLS INLINE
-	ap_uint<23> q = MOD;
-
-    ap_uint<23> odd_cast = static_cast<ap_uint<23>>(coeff);
-    ap_uint<23> tw_factor_cast = static_cast<ap_uint<23>>(tw_factor);
-
-
-	ap_uint <46> z = odd_cast*tw_factor_cast;
+#elif defined(USE_Q8380417) //Data is 23b
 
 	// c = z[45:43} + z[42:33} + z[32:23], max(c) = 2052 (12-bit integer)
 	ap_uint<12> c = z.range(45, 43) + z.range(42, 33) + z.range(32, 23);
@@ -63,9 +44,9 @@ void reduce(Data coeff, Data tw_factor, Data& remainder){
 	ap_uint<11> e = c.range(11, 10) + c.range(9, 0);
 
 
-    // f is less than q
+	// f is less than q
 	ap_uint<23> f = (ap_uint<23>) (e[10] + e.range(9, 0)) << 13;
-    f = f -(e[10]+ c.range(11, 10));
+	f = f -(e[10]+ c.range(11, 10));
 
 	// g could be bigger than q (23-bit integer) 
 	ap_uint<23> g = z.range(22, 0);
@@ -73,23 +54,8 @@ void reduce(Data coeff, Data tw_factor, Data& remainder){
 	// Calculate y
 	ap_uint<32> y = f + g - q*(g > q);
 
-	y = y- q*(y > q);
+#elif defined(USE_Q3221225473) //Data is 32b
 
-	y = y + q * (y < d) - d;
-
-	remainder =  static_cast<Data>(y);
-}
-
-#elif defined(USE_Q3221225473)
-void reduce(Data coeff, Data tw_factor, Data& remainder){
-#pragma HLS INLINE
-	ap_uint<32> q = MOD;
-
-	ap_uint<32> odd_cast = static_cast<ap_uint<32>>(coeff);
-	ap_uint<32> tw_factor_cast = static_cast<ap_uint<32>>(tw_factor);
-
-	ap_uint <64> z = odd_cast*tw_factor_cast;
-	
 	// max(c) = 46 (6-bit integer)
 	ap_uint<6> c = 	z.range(63, 62) + z.range(61, 60) + z.range(59, 58) + z.range(57, 56)
 					+ z.range(55, 54) + z.range(53, 52) + z.range(51, 50) + z.range(49, 48)
@@ -119,37 +85,36 @@ void reduce(Data coeff, Data tw_factor, Data& remainder){
 	// Calculate y
 	ap_uint<33> y = g + h - q*(h > q);
 
-	y = y- q*(y > q);
-
-	y = y + q * (y < d) - d;
-	
-	remainder =  static_cast<Data>(y);
-}
 #else
-#error "You must define either USE_Q12289 or USE_Q8380417"
+#error "One of USE_Q12289, USE_Q8380417, or USE_Q3221225473 must be defined."
 #endif
 
+	y = y - q * (y > q);
+	y = y + q * (y < d) - d;
 
-
-void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_odd) {
-    #pragma HLS INLINE
-    
-	ap_uint<K+2> mod = MOD;
-
-    Data reduced; reduce(odd, tw_factor, reduced);
-
-	ap_int<K+2> coeff_even  = (ap_int<K+2>) even + (ap_int<K+2>) reduced;
-	ap_int<K+2> coeff_odd  = (ap_int<K+2>) even - (ap_int<K+2>) reduced;
-    
-	ap_int<K+2> out0 = (coeff_even >= mod) ? (ap_int<K+2>) (coeff_even - mod): coeff_even;
-	ap_int<K+2> out1 = (coeff_odd < 0)    ? 	(ap_int<K+2>) (coeff_odd + mod) : coeff_odd;
-
-    // Cast the results to the correct width so that both branches are the same type
-    *out_even = static_cast<Data>(out0);
-    *out_odd  = static_cast<Data>(out1);
+	remainder =  static_cast<Data>(y);
 }
 
-void bf_unit(int id, int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
+void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_odd) {
+#pragma HLS INLINE
+
+	ap_uint<K+2> mod = MOD;
+
+	Data reduced;
+	reduce(odd, tw_factor, reduced);
+
+	ap_int<K+2> coeff_even = (ap_int<K+2>) even + (ap_int<K+2>) reduced;
+	ap_int<K+2> coeff_odd  = (ap_int<K+2>) even - (ap_int<K+2>) reduced;
+
+	ap_int<K+2> out0 = (coeff_even >= mod) ? (ap_int<K+2>) (coeff_even - mod): coeff_even;
+	ap_int<K+2> out1 = (coeff_odd < 0)     ? (ap_int<K+2>) (coeff_odd + mod) : coeff_odd;
+
+	// Cast the results to the correct width so that both branches are the same type
+	*out_even = static_cast<Data>(out0);
+	*out_odd  = static_cast<Data>(out1);
+}
+
+void bf_unit(int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
 		tapa::ostream<Data>& output0, tapa::ostream<Data>& output1){
 
 	int stride = n >> (stage + 1); 
@@ -296,7 +261,7 @@ void temporal_stage(int stage, tapa::istreams<Data, BU>& input_stream0, tapa::is
 	tapa::streams<Data, BU> inter_streams1;
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(bf_unit, tapa::seq(), stage, input_stream0, input_stream1, inter_streams0, inter_streams1)
+		.invoke<tapa::detach, BU>(bf_unit, stage, input_stream0, input_stream1, inter_streams0, inter_streams1)
 		.invoke<tapa::detach, BU>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1);
 }
 
@@ -372,7 +337,7 @@ OUTPUT_LOOP:
 	}
 }
 
-void input_mem_stage_int(int id, tapa::istream<Data>& x_0, tapa::istream<Data>& x_1,
+void input_mem_stage_core(tapa::istream<Data>& x_0, tapa::istream<Data>& x_1,
 		tapa::ostream<Data>& even_y, tapa::ostream<Data>& odd_y){
 
 	// memory for entry with EVEN indices
@@ -472,7 +437,7 @@ void input_mem_stage(tapa::istreams<Data, BU>& x_0, tapa::istreams<Data, BU>& x_
 		tapa::ostreams<Data, BU>& y_0, tapa::ostreams<Data, BU>& y_1){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(input_mem_stage_int, tapa::seq(), x_0, x_1, y_0, y_1);
+		.invoke<tapa::detach, BU>(input_mem_stage_core, x_0, x_1, y_0, y_1);
 }
 
 
@@ -841,7 +806,7 @@ void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_COR
 #endif
 
 
-void ntt_core(int id, tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o){
+void ntt_core(tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o){
 
 	tapa::streams<Data, BU*(num_temp_stage+1), 2> even_streams("even_streams");
 	tapa::streams<Data, BU*(num_temp_stage+1), 2> odd_streams("odd_streams");
@@ -877,7 +842,7 @@ void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int
 	 	.invoke<tapa::detach, NUM_CORE>(read_dist_s, dramrd_streams, core_istreams_e, core_istreams_o)
 #endif
 
-		.invoke<tapa::detach, NUM_CORE>(ntt_core, tapa::seq(), core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, NUM_CORE>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
 
 #ifdef MCH
 		.invoke<tapa::detach, GROUP_NUM>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)

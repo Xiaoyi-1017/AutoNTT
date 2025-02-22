@@ -1,5 +1,6 @@
 #ifndef NTT_H
 #define NTT_H
+
 #include <cmath>
 #include <algorithm>
 #include "hls_vector.h"
@@ -9,8 +10,8 @@
 
 constexpr int K = {K};
 
-using Data = ap_uint<K>;// Data = ap_uint<14>
-using HostData = {DATA_FORMAT};
+using HostData = {DATA_FORMAT}; 
+using Data = ap_uint<K>; // ap_uint<14|23|32>
 
 constexpr int DataCHLen = 64 / {DATA_BSIZE}; // 64 / sizeof(Data)
 constexpr int EffDataCHLen = {EffDataCHLen}; 
@@ -74,7 +75,6 @@ constexpr HostData psi = {PSI};
 
 // Bit reversed array of twiddle factors
 const Data tw_factors[n] = {{TW_FACTORS}};
-
 
 
 #endif // NTT_H

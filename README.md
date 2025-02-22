@@ -1,4 +1,4 @@
-# NTT_accel_generator
+# AutoNTT
 Code generator for FPGA NTT accelerator
 
 ### Prerequisites
@@ -7,9 +7,9 @@ Code generator for FPGA NTT accelerator
 
 - AMD Alveo U280 Platform - https://www.xilinx.com/publications/product-briefs/alveo-u280-product-brief.pdf
 
-- TAPA (0.1.20250127) - https://tapa.readthedocs.io/en/main/
+- TAPA (0.1.20250226) - https://tapa.readthedocs.io/en/main/
 
-- Rapidstream (2025.1.0109, recommended) - https://docs.rapidstream-da.com/
+- Rapidstream (2025.1.0212, recommended) - https://docs.rapidstream-da.com/
 
 ### Install Python Requirements
 ```bash
@@ -24,19 +24,19 @@ Please use generate_code.py to automatically generate an NTT project.
 |----------|-------------|-----------------|---------|
 | **N** | Transform size (polynomial degree) | 256, 512, 1024 | 1024 |
 | **q** | Prime modulus | 12289, 8380417, 3221225473 | 12289 |
-| **BU** | Number of butterfly units per stage | 1, 2, 4, 8, 16, 32 | 8 |
-| **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8 | 4 |
+| **BU** | Number of butterfly units per stage | 1, 2, 4, 8, 16, 32 | 16 |
+| **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8 | 8 |
 
 Example command (with default values):
 ```bash
-./generate_code.py -N 1024 -q 12289 -BU 8 -CH 4 
+./generate_code.py -N 1024 -q 12289 -BU 16 -CH 8 
 ```
 
 Example console message:
 ```
-Values used -> N: 1024, q: 12289, HostData: uint16_t, BU: 8, CH: 4, veclen: 32
+Values used -> N: 1024, q: 12289, HostData: uint16_t, BU: 16, CH: 8, veclen: 32
 Number of NTT cores: 8
-Creating a new folder: N1024_BU8_CH4_q12289
+Creating a new folder: N1024_BU16_CH8_q12289
 ```
 
 ## Compilation & Execution 
@@ -65,24 +65,5 @@ Simulation / Onboard verification (NUM = number of polynomials)
 make run TARGET={sw | xo | hw | hw-opt} NUM=10000
 ```
 
-## Updates
-### 2025/01/10
-#### Modified
-- **ntt.cpp**: implemented input_stage and temporal_stage differently so that it does not require further modification
-- **host.cpp**: implemented input & output processing that supports B less than 8 (multiple samples in the same channel)
-- **generate_code.py**: creates folder containing necessary files (src, Makefile, link_config.ini) for different configurations 
+You should see **PASSED!** message after running on-board verification.
 
-#### Added
-- **gen_config.py**: generates floorplan & device configs for Rapidstream-tapaopt (stored under "all_files" folder)
-
-### 2025/01/17 & 2025/01/18
-#### Modified
-- **Merging folder / generate_code.py**: merged "all_files" with " templates" and modified generate_code.py accordingly
-- **gen_config.py**: Fixed port_pre_assignments
-- **Makefile**: Rearranged directories for rapidstream-tapaopt
-
-### 2025/02/18
-#### Modified
-- **Added support for multiple modulo(12289, 8380417, 3221225473)**: Modular reduction and butterfly unit modules are modified.
-- **separate Data types for both host and kernel**: Outside of the kernel: Standard C/C++ data types / Inside the kernel: ap_uint`<K>`.
-- **generate_code.py**: The bit length and data type of data are determined based on the value of q.
