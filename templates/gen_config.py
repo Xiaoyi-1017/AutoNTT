@@ -42,7 +42,7 @@ def gen_config(ch: int) -> None:
     floorplan_config = FloorplanConfig(
         port_pre_assignments=port_pre_assignments,
         dse_range_min=0.6,
-        dse_range_max=0.8,
+        dse_range_max=0.7,
     )
     floorplan_config.save_to_file(FLOOR_PLAN_CONFIG)
 
