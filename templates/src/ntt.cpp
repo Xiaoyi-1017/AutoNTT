@@ -86,7 +86,7 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 	ap_uint<33> y = g + h - q*(h > q);
 
 #else
-#error "One of USE_Q12289, USE_Q8380417, or USE_Q3221225473 must be defined."
+	#error "One of USE_Q12289, USE_Q8380417, or USE_Q3221225473 must be defined."
 #endif
 
 	y = y - q * (y > q);
@@ -738,7 +738,7 @@ void write_dram_m(tapa::mmap<bits<DataVec>> y, tapa::istreams<Data, 2*BU> & dram
 	}
 }
 
-#else
+#else //MCH
 
 void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE_NUM> & dramrd_streams, int poly_num){
 
@@ -803,7 +803,7 @@ void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_COR
 	}
 }
 
-#endif
+#endif //MCH
 
 
 void ntt_core(tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o){
@@ -817,7 +817,163 @@ void ntt_core(tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU>
 		.invoke<tapa::detach>(spatial_stages, even_streams, odd_streams, core_ostreams_e, core_ostreams_o); 
 }
 
+#ifndef MCH
 
+void ntt_group_dram1(tapa::mmap<bits<DataVec>> x, tapa::mmap<bits<DataVec>> y, int poly_num){
+
+	tapa::streams<DataVec, GROUP_CORE_NUM, POLY_FIFO_DEPTH_S> dramrd_streams("dramrd_streams");
+	tapa::streams<DataVec, GROUP_CORE_NUM, POLY_FIFO_DEPTH_S> dramwr_streams("dramwr_streams");
+	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_istreams_e("core_istreams_e");
+	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_istreams_o("core_istreams_o");
+	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_ostreams_e("core_ostreams_e");
+	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_ostreams_o("core_ostreams_o");
+
+	tapa::task()
+		.invoke<tapa::join>(read_dram_s, x, dramrd_streams, poly_num)
+	 	.invoke<tapa::detach, GROUP_CORE_NUM>(read_dist_s, dramrd_streams, core_istreams_e, core_istreams_o)
+
+		.invoke<tapa::detach, GROUP_CORE_NUM>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+
+		.invoke<tapa::detach, GROUP_CORE_NUM>(write_reshape_s, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::join>(write_dram_s, y, dramwr_streams, poly_num)
+	;
+}
+
+#else //MCH
+
+void ntt_group_dram2(
+	tapa::mmap<bits<DataVec>> x0, 
+	tapa::mmap<bits<DataVec>> x1, 
+	tapa::mmap<bits<DataVec>> y0, 
+	tapa::mmap<bits<DataVec>> y1, 
+	int poly_num){
+
+	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
+	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
+	tapa::streams<Data, BU, 2> core_istreams_e("core_istreams_e");
+	tapa::streams<Data, BU, 2> core_istreams_o("core_istreams_o");
+	tapa::streams<Data, BU, 2> core_ostreams_e("core_ostreams_e");
+	tapa::streams<Data, BU, 2> core_ostreams_o("core_ostreams_o");
+
+	tapa::task()
+		.invoke<tapa::join>(read_dram_m, x0, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x1, dramrd_streams, poly_num)
+		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
+
+		.invoke<tapa::detach>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+
+		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::join>(write_dram_m, y0, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y1, dramwr_streams, poly_num)
+	;
+}
+
+void ntt_group_dram4(
+	tapa::mmap<bits<DataVec>> x0, 
+	tapa::mmap<bits<DataVec>> x1, 
+	tapa::mmap<bits<DataVec>> x2, 
+	tapa::mmap<bits<DataVec>> x3, 
+	tapa::mmap<bits<DataVec>> y0, 
+	tapa::mmap<bits<DataVec>> y1, 
+	tapa::mmap<bits<DataVec>> y2, 
+	tapa::mmap<bits<DataVec>> y3, 
+	int poly_num){
+
+	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
+	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
+	tapa::streams<Data, BU, 2> core_istreams_e("core_istreams_e");
+	tapa::streams<Data, BU, 2> core_istreams_o("core_istreams_o");
+	tapa::streams<Data, BU, 2> core_ostreams_e("core_ostreams_e");
+	tapa::streams<Data, BU, 2> core_ostreams_o("core_ostreams_o");
+
+	tapa::task()
+		.invoke<tapa::join>(read_dram_m, x0, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x1, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x2, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x3, dramrd_streams, poly_num)
+		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
+
+		.invoke<tapa::detach>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+
+		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::join>(write_dram_m, y0, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y1, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y2, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y3, dramwr_streams, poly_num)
+	;
+}
+
+void ntt_group_dram8(
+	tapa::mmap<bits<DataVec>> x0, 
+	tapa::mmap<bits<DataVec>> x1, 
+	tapa::mmap<bits<DataVec>> x2, 
+	tapa::mmap<bits<DataVec>> x3, 
+	tapa::mmap<bits<DataVec>> x4, 
+	tapa::mmap<bits<DataVec>> x5, 
+	tapa::mmap<bits<DataVec>> x6, 
+	tapa::mmap<bits<DataVec>> x7, 
+	tapa::mmap<bits<DataVec>> y0, 
+	tapa::mmap<bits<DataVec>> y1, 
+	tapa::mmap<bits<DataVec>> y2, 
+	tapa::mmap<bits<DataVec>> y3, 
+	tapa::mmap<bits<DataVec>> y4, 
+	tapa::mmap<bits<DataVec>> y5, 
+	tapa::mmap<bits<DataVec>> y6, 
+	tapa::mmap<bits<DataVec>> y7, 
+	int poly_num){
+
+	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
+	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
+	tapa::streams<Data, BU, 2> core_istreams_e("core_istreams_e");
+	tapa::streams<Data, BU, 2> core_istreams_o("core_istreams_o");
+	tapa::streams<Data, BU, 2> core_ostreams_e("core_ostreams_e");
+	tapa::streams<Data, BU, 2> core_ostreams_o("core_ostreams_o");
+
+	tapa::task()
+		.invoke<tapa::join>(read_dram_m, x0, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x1, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x2, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x3, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x4, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x5, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x6, dramrd_streams, poly_num)
+		.invoke<tapa::join>(read_dram_m, x7, dramrd_streams, poly_num)
+		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
+
+		.invoke<tapa::detach>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+
+		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::join>(write_dram_m, y0, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y1, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y2, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y3, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y4, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y5, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y6, dramwr_streams, poly_num)
+		.invoke<tapa::join>(write_dram_m, y7, dramwr_streams, poly_num)
+	;
+}
+
+#endif //MCH
+
+void ntt(tapa::mmaps<bits<DataVec>, 2*CH> hbm_ch, int poly_num){
+
+	tapa::task()
+#if GROUP_CH_NUM == 1
+		.invoke<tapa::join, GROUP_NUM>(ntt_group_dram1, hbm_ch, hbm_ch, poly_num )
+#elif GROUP_CH_NUM == 2
+		.invoke<tapa::join, GROUP_NUM>(ntt_group_dram2, hbm_ch, hbm_ch, hbm_ch, hbm_ch, poly_num )
+#elif GROUP_CH_NUM == 4
+		.invoke<tapa::join, GROUP_NUM>(ntt_group_dram4, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, poly_num )
+#elif GROUP_CH_NUM == 8
+		.invoke<tapa::join, GROUP_NUM>(ntt_group_dram8, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, hbm_ch, poly_num )
+#else
+    #error "GROUP_CH_NUM must be one of 1, 2, 4, or 8"
+#endif
+	;
+}
+
+/*
 void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int poly_num){
 
 #ifdef MCH
@@ -854,3 +1010,4 @@ void ntt(tapa::mmaps<bits<DataVec>, CH> x, tapa::mmaps<bits<DataVec>, CH> y, int
 	;
 
 }
+*/

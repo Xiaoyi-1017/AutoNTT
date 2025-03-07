@@ -35,6 +35,8 @@ SAVE_WAVEFORM := 1
 MAKEFLAGS += --no-print-directory
 
 CH := {CH} 
+GROUP_NUM := {GROUP_NUM}
+GROUP_CH_NUM := {GROUP_CH_NUM}
 
 .PHONY: all compile run clean help
 
@@ -109,7 +111,7 @@ run-xo:
 build-xo-opt:
 	@echo "Making configuration files for rapidstream..."
 	mkdir -p $(OPT_DIR)
-	(cd $(OPT_DIR) && rapidstream ../gen_config.py --ch $(CH))
+	(cd $(OPT_DIR) && rapidstream ../gen_config.py --ch $(CH) --group_num $(GROUP_NUM) --group_ch_num $(GROUP_CH_NUM))
 	@echo "Optimizing the design..."
 	rapidstream-tapaopt \
 		--work-dir $(OPT_DIR) \
@@ -124,7 +126,7 @@ build-xo-opt:
 build-hw-opt:
 	@echo "Making configuration files for rapidstream..."
 	mkdir -p $(OPT_DIR)
-	(cd $(OPT_DIR) && rapidstream ../gen_config.py --ch $(CH))
+	(cd $(OPT_DIR) && rapidstream ../gen_config.py --ch $(CH) --group_num $(GROUP_NUM) --group_ch_num $(GROUP_CH_NUM))
 	@echo "Optimizing the design..."
 	rapidstream-tapaopt \
 		--work-dir $(OPT_DIR) \

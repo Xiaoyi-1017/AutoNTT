@@ -52,15 +52,9 @@ def generate_ini(ch, folder):
     lines = ["[connectivity]"]
     lines_1 = ["[connectivity]"]
 
-    for i in range(ch):
-        lines.append(f"sp=ntt.x_{i}:HBM[{i}]")
-        lines_1.append(f"sp=ntt_1.x_{i}:HBM[{i}]")
-
-    offset = ch
-
-    for i in range(ch):
-        lines.append(f"sp=ntt.y_{i}:HBM[{i + offset}]")
-        lines_1.append(f"sp=ntt_1.y_{i}:HBM[{i + offset}]")
+    for i in range(2*ch):
+        lines.append(f"sp=ntt.hbm_ch_{i}:HBM[{i}]")
+        lines_1.append(f"sp=ntt_1.hbm_ch_{i}:HBM[{i}]")
 
     filename = os.path.join(folder, "link_config.ini")
     with open(filename, "w") as file:
@@ -71,6 +65,22 @@ def generate_ini(ch, folder):
     filename_1 = os.path.join(folder, "link_config_1.ini")
     with open(filename_1, "w") as file_1:
         file_1.write("\n".join(lines_1))
+
+
+def generate_makefile(CH, GROUP_NUM, GROUP_CH_NUM, folder):
+    template_file = "./templates/Makefile"
+    with open(template_file, "r") as file:
+        content = file.read()
+
+    content = content.replace("{CH}", str(CH))
+    content = content.replace("{GROUP_NUM}", str(GROUP_NUM))
+    content = content.replace("{GROUP_CH_NUM}", str(GROUP_CH_NUM))
+
+    output_file = os.path.join(folder, "Makefile")
+    with open(output_file, "w") as file:
+        file.write(content)
+
+    #print(f"{output_file} has been generated.")
 
 
 def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
@@ -143,18 +153,8 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
 
     #print(f"{target_file} has been generated.")
 
-def generate_makefile(CH, folder):
-    template_file = "./templates/Makefile"
-    with open(template_file, "r") as file:
-        content = file.read()
+    generate_makefile(CH, GROUP_NUM, GROUP_CH_NUM, folder)
 
-    content = content.replace("{CH}", str(CH))
-
-    output_file = os.path.join(folder, "Makefile")
-    with open(output_file, "w") as file:
-        file.write(content)
-
-    #print(f"{output_file} has been generated.")
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate the number of NTT cores.")
@@ -207,7 +207,6 @@ def main():
         # Generate new files in the folder
         generate_ini(CH, folder_name)
         generate_header(N, mod, K, bits, data_format, BU, CH, folder_name)
-        generate_makefile(CH, folder_name)
 
  
 if __name__ == "__main__":
