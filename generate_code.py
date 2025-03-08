@@ -100,7 +100,7 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     NUM_CORE = int(CH * EffDataCHLen / (2*BU))
 
     if NUM_CORE < 1:
-        raise ValueError(f"Error: CH*{EffDataCHLen} must be larger than 2*BU.")
+        raise ValueError(f"Error: CH*{EffDataCHLen} must be equal to or larger than 2*BU.")
 
     GROUP_NUM = int(min(CH, NUM_CORE))
     GROUP_CH_NUM = int(CH / GROUP_NUM)

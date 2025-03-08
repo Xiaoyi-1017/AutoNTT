@@ -5,10 +5,10 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 #pragma HLS INLINE
 
 	Data q = MOD;
-	Data odd_cast = coeff;
-	Data tw_factor_cast = tw_factor;
+	ap_uint<2*K> odd_cast = coeff;
+	ap_uint<2*K> tw_factor_cast = tw_factor;
 
-	ap_uint<2*K> z = (ap_uint<2*K>)odd_cast * (ap_uint<2*K>)tw_factor_cast;
+	ap_uint<2*K> z = odd_cast * tw_factor_cast;
 
 #ifdef USE_Q12289 //Data is 14b
 
@@ -30,8 +30,10 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 
 	ap_uint<14> g = z.range(13, 0);
 
+        Data q_temp = (g > q) ? q : (Data)0;
+
 	// Calculate y
-	ap_uint<16> y = f + g - q*(g > q);
+	ap_uint<16> y = f + g - q_temp;
 
 #elif defined(USE_Q8380417) //Data is 23b
 
@@ -51,8 +53,10 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 	// g could be bigger than q (23-bit integer) 
 	ap_uint<23> g = z.range(22, 0);
 
+        Data q_temp = (g > q) ? q : (Data)0;
+
 	// Calculate y
-	ap_uint<32> y = f + g - q*(g > q);
+	ap_uint<32> y = f + g - q_temp;
 
 #elif defined(USE_Q3221225473) //Data is 32b
 
@@ -82,15 +86,20 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 	// h could be bigger than q (23-bit integer) 
 	ap_uint<32> h = z.range(31, 0);
 
+        Data q_temp = (h > q) ? q : (Data)0;
+
 	// Calculate y
-	ap_uint<33> y = g + h - q*(h > q);
+	ap_uint<33> y = g + h - q_temp;
 
 #else
 	#error "One of USE_Q12289, USE_Q8380417, or USE_Q3221225473 must be defined."
 #endif
 
-	y = y - q * (y > q);
-	y = y + q * (y < d) - d;
+        Data q_temp2 = (y > q) ? q : (Data)0;
+	y = y - q_temp2;
+
+        Data q_temp3 = (y < d) ? q : (Data)0;
+	y = y + q_temp3 - d;
 
 	remainder =  static_cast<Data>(y);
 }
@@ -114,10 +123,11 @@ void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_od
 	*out_odd  = static_cast<Data>(out1);
 }
 
-void bf_unit(int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
+void bf_unit(const int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
 		tapa::ostream<Data>& output0, tapa::ostream<Data>& output1){
 
-	int stride = n >> (stage + 1); 
+	const int shift = stage + 1;
+	const int stride = n >> shift; 
 
 	Data even, odd;
 	Data out_even, out_odd;
@@ -131,7 +141,7 @@ BF_LOOP:
 			even = input0.read();
 			odd = input1.read();
 
-			int tw_idx = (read_i*BU)/stride +  n/(2 * stride);
+			int tw_idx = ((read_i*BU) >> (logN - shift)) + (1<<stage);
 
 			butterfly(even, odd,  tw_factors[tw_idx], &out_even, &out_odd);
 
@@ -254,7 +264,7 @@ MEM_STAGE_LOOP:
 	}
 }
 
-void temporal_stage(int stage, tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
+void temporal_stage(const int stage, tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
 		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1){
 
 	tapa::streams<Data, BU> inter_streams0;
