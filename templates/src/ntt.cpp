@@ -123,42 +123,13 @@ void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_od
 	*out_odd  = static_cast<Data>(out1);
 }
 
-void bf_unit(const int stage, tapa::istream<Data>& input0, tapa::istream<Data>& input1,
-		tapa::ostream<Data>& output0, tapa::ostream<Data>& output1){
 
-	const int shift = stage + 1;
-	const int stride = n >> shift; 
-
-	Data even, odd;
-	Data out_even, out_odd;
-	ap_uint<logDEPTH> read_i = 0;
-
-BF_LOOP:
-	for(;;){
-#pragma HLS PIPELINE II = 1
-		if(!input0.empty() && !input1.empty()){
-
-			even = input0.read();
-			odd = input1.read();
-
-			int tw_idx = ((read_i*BU) >> (logN - shift)) + (1<<stage);
-
-			butterfly(even, odd,  tw_factors[tw_idx], &out_even, &out_odd);
-
-			output0.write(out_even);
-			output1.write(out_odd);                
-
-			read_i++;
-		}
-	}
-}
-
-
-void mem_stage(const int stage, tapa::istream<Data>& input_stream0, tapa::istream<Data>& input_stream1, 
+void bf_unit(const int stage, tapa::istream<Data>& input_stream0, tapa::istream<Data>& input_stream1, 
 		tapa::ostream<Data>& output_stream0, tapa::ostream<Data>& output_stream1)
 {
-	const int stride = DEPTH >> (stage+1);
-	const int shift = num_temp_stage - (stage+1);
+	const int stage_shift = stage + 1;
+	const int stride = DEPTH >> stage_shift;
+	const int shift = num_temp_stage - stage_shift;
 	const int mask = (1<<shift) -1;
 
 	// memory for entry with EVEN indices
@@ -180,7 +151,7 @@ void mem_stage(const int stage, tapa::istream<Data>& input_stream0, tapa::istrea
 	bool read_done = false;
 	bool write_done = false;
 
-MEM_STAGE_LOOP:
+BF_UNIT_LOOP:
 	for(;;){
 #pragma HLS pipeline II = 1
 #pragma HLS dependence variable=mem0 type=inter false
@@ -226,16 +197,21 @@ MEM_STAGE_LOOP:
 		}
 
 		if(read_done == false && !input_stream0.empty() && !input_stream1.empty()){
-			Data input_data0 = input_stream0.read();
-			Data input_data1 = input_stream1.read();
+			Data in_even = input_stream0.read();
+			Data in_odd = input_stream1.read();
+			Data out_even, out_odd;
+
+			int tw_idx = ((read_i*BU) >> (logN - stage_shift)) + (1<<stage);
+
+			butterfly(in_even, in_odd,  tw_factors[tw_idx], &out_even, &out_odd);
 
 			if(read_mem_idx ==  0){    
-				mem0[rd_s][raddr] = input_data0;
-				mem1[rd_s][raddr] = input_data1;
+				mem0[rd_s][raddr] = out_even;
+				mem1[rd_s][raddr] = out_odd;
 			}
 			else{
-				mem2[rd_s][raddr] = input_data0;
-				mem3[rd_s][raddr] = input_data1;
+				mem2[rd_s][raddr] = out_even;
+				mem3[rd_s][raddr] = out_odd;
 			}
 
 			read_i++;
@@ -267,12 +243,9 @@ MEM_STAGE_LOOP:
 void temporal_stage(const int stage, tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
 		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1){
 
-	tapa::streams<Data, BU> inter_streams0;
-	tapa::streams<Data, BU> inter_streams1;
-
 	tapa::task()
-		.invoke<tapa::detach, BU>(bf_unit, stage, input_stream0, input_stream1, inter_streams0, inter_streams1)
-		.invoke<tapa::detach, BU>(mem_stage, stage, inter_streams0, inter_streams1, output_stream0, output_stream1);
+		.invoke<tapa::detach, BU>(bf_unit, stage, input_stream0, input_stream1, output_stream0, output_stream1)
+	;
 }
 
 void spatial_stages(tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,

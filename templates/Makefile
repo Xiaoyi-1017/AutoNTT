@@ -2,8 +2,6 @@
 APP := ntt
 HOST := host_ntt
 
-NUM := 100 
-
 # Default TARGET is 'sw', and it can be overridden by specifying a different value
 TARGET := sw
 
@@ -37,6 +35,17 @@ MAKEFLAGS += --no-print-directory
 CH := {CH} 
 GROUP_NUM := {GROUP_NUM}
 GROUP_CH_NUM := {GROUP_CH_NUM}
+
+# Check if NUM was set by the user or not
+
+#NUM := 100 
+ifeq ($(origin NUM), undefined)
+    SIM_NUM := $(shell expr 100 \* $(CH))
+    HW_SIM_NUM := $(shell expr 10000 \* $(CH))
+else
+    SIM_NUM := $(NUM)
+    HW_SIM_NUM := $(NUM)
+endif
 
 .PHONY: all compile run clean help
 
@@ -77,7 +86,7 @@ run-sw:
 		echo "Error: Executable $(HOST) not found. Please build it first!" >&2; \
 		exit 1; \
 	fi
-	./$(HOST) $(NUM)
+	./$(HOST) $(SIM_NUM)
 
 # Build XO file
 build-xo:
@@ -98,12 +107,12 @@ run-xo:
 			--xosim-part-num $(PART_NUM) \
 			--xosim_work_dir $(SIM_XO_DIR) \
 			--xosim_save_waveform \
-			$(NUM); \
+			$(SIM_NUM); \
 	else \
 		./$(HOST) --bitstream $(XO_FILE) \
 			--xosim-part-num $(PART_NUM) \
 			--xosim_work_dir $(SIM_XO_DIR) \
-			$(NUM); \
+			$(SIM_NUM); \
 	fi
 	@echo "XO simulation complete."
 
@@ -155,13 +164,13 @@ run-xo-opt:
 			--xosim-part-num $(PART_NUM) \
 			--xosim_work_dir $(SIM_XO_OPT_DIR) \
 			--xosim_save_waveform \
-			$(NUM); \
+			$(SIM_NUM); \
 	else \
 		./$(HOST) \
 			--bitstream "$(OPT_DIR)/dse/solution_0/updated.xo" \
 			--xosim-part-num $(PART_NUM) \
 			--xosim_work_dir $(SIM_XO_OPT_DIR) \
-			$(NUM); \
+			$(SIM_NUM); \
 	fi
 	@echo "Optimized design run complete."
 
@@ -195,17 +204,17 @@ build-hw-opt-old:
 # Run on FPGA
 run-hw:
 	@echo "Running on hardware..."
-	./$(HOST) --bitstream $(HW_OUTPUT)/$(BITSTREAM_HW) $(NUM)
+	./$(HOST) --bitstream $(HW_OUTPUT)/$(BITSTREAM_HW) $(HW_SIM_NUM)
 	@echo "Hardware run complete."
 
 run-hw-opt:
 	@echo "Running on hardware..."
-	./$(HOST) --bitstream $(OPT_DIR)/$(BITSTREAM_HW_OPT) $(NUM)
+	./$(HOST) --bitstream $(OPT_DIR)/$(BITSTREAM_HW_OPT) $(HW_SIM_NUM)
 	@echo "Hardware run complete."
 
 run-hw-opt-old:
 	@echo "Running on hardware..."
-	./$(HOST) --bitstream $(HW_OPT_OUTPUT)/$(BITSTREAM_HW) $(NUM)
+	./$(HOST) --bitstream $(HW_OPT_OUTPUT)/$(BITSTREAM_HW) $(HW_SIM_NUM)
 	@echo "Hardware run complete."
 
 #Help
