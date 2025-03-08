@@ -40,7 +40,7 @@ GROUP_CH_NUM := {GROUP_CH_NUM}
 
 #NUM := 100 
 ifeq ($(origin NUM), undefined)
-    SIM_NUM := $(shell expr 100 \* $(CH))
+    SIM_NUM := $(shell expr 50 \* $(CH))
     HW_SIM_NUM := $(shell expr 10000 \* $(CH))
 else
     SIM_NUM := $(NUM)

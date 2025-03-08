@@ -278,6 +278,7 @@ STAGE_LOOP:
 #pragma HLS unroll 
 
 				int current_stage = s + logN - logBU -1;
+				int stage_shift = current_stage + 1;
 				int stride = n >> ((current_stage) + 1);
 				int next_stride = stride >> 1;
 
@@ -296,7 +297,7 @@ BUTTERFLY_LOOP:
 					int j = idx >> shift;
 					int k = idx & mask;
 
-					int tw_idx = (i*BU+idx)/stride + n / (2 * stride);
+					int tw_idx = ((i*BU+idx)>>(logN-stage_shift)) + (1<<current_stage);
 
 					int ind_even = (next_stride == 0) ? ( j << (shift+1) ) 
 						: ( j << (shift+1) ) + (k & next_mask) * 2 + (k >> (shift-1));
