@@ -5,10 +5,10 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 #pragma HLS INLINE
 
 	Data q = MOD;
-	ap_uint<2*K> odd_cast = coeff;
-	ap_uint<2*K> tw_factor_cast = tw_factor;
+	Data2 odd_cast = coeff;
+	Data2 tw_factor_cast = tw_factor;
 
-	ap_uint<2*K> z = odd_cast * tw_factor_cast;
+	Data2 z = odd_cast * tw_factor_cast;
 
 #ifdef USE_Q12289 //Data is 14b
 
@@ -124,8 +124,8 @@ void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_od
 }
 
 
-void bf_unit(const int stage, tapa::istream<Data>& input_stream0, tapa::istream<Data>& input_stream1, 
-		tapa::ostream<Data>& output_stream0, tapa::ostream<Data>& output_stream1)
+void bf_unit(const int stage, tapa::istream<Data2>& input_stream,  
+		tapa::ostream<Data2>& output_stream)
 {
 	const int stage_shift = stage + 1;
 	const int stride = DEPTH >> stage_shift;
@@ -185,8 +185,8 @@ BF_UNIT_LOOP:
 				output_data1 = mem3[wr_s][waddr];
 			}
 
-			output_stream0.write(output_data0);
-			output_stream1.write(output_data1);
+			Data2 output_data = (output_data1, output_data0);
+			output_stream.write(output_data);
 
 			write_i++;
 
@@ -196,9 +196,11 @@ BF_UNIT_LOOP:
 			}
 		}
 
-		if(read_done == false && !input_stream0.empty() && !input_stream1.empty()){
-			Data in_even = input_stream0.read();
-			Data in_odd = input_stream1.read();
+		if( read_done == false && !input_stream.empty() ){
+
+			Data2 in_data = input_stream.read();
+			Data in_even = in_data(K-1,0);
+			Data in_odd = in_data(2*K-1,K);
 			Data out_even, out_odd;
 
 			int tw_idx = ((read_i*BU) >> (logN - stage_shift)) + (1<<stage);
@@ -240,16 +242,14 @@ BF_UNIT_LOOP:
 	}
 }
 
-void temporal_stage(const int stage, tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
-		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1){
+void temporal_stage(const int stage, tapa::istreams<Data2, BU>& input_stream, tapa::ostreams<Data2, BU>& output_stream){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(bf_unit, stage, input_stream0, input_stream1, output_stream0, output_stream1)
+		.invoke<tapa::detach, BU>(bf_unit, stage, input_stream, output_stream)
 	;
 }
 
-void spatial_stages(tapa::istreams<Data, BU>& input_stream0, tapa::istreams<Data, BU>& input_stream1,
-		tapa::ostreams<Data, BU>& output_stream0, tapa::ostreams<Data, BU>& output_stream1){
+void spatial_stages(tapa::istreams<Data2, BU>& input_streams, tapa::ostreams<Data2, BU>& output_streams){
 
 	const int num_of_stages = logBU + 1;
 	Data mem[num_of_stages+1][WIDTH];
@@ -261,7 +261,7 @@ NTT_SPATIAL_LOOP:
 		bool do_read = 1;
 		for(int j = 0; j < BU; j++){
 #pragma HLS UNROLL
-			do_read &= !input_stream0[j].empty() & !input_stream1[j].empty();
+			do_read &= !input_streams[j].empty() ;
 		}
 
 		//for(int i = 0; i < DEPTH; i++){
@@ -269,8 +269,10 @@ NTT_SPATIAL_LOOP:
 INPUT_LOOP:
 			for(int j = 0; j < BU; j++){
 #pragma HLS UNROLL
-				mem[0][2*j] = input_stream0[j].read();
-				mem[0][2*j+1] = input_stream1[j].read();
+				Data2 in_data = input_streams[j].read();
+
+				mem[0][2*j] = in_data(K-1,0);
+				mem[0][2*j+1] = in_data(2*K-1,K);
 			}
 
 STAGE_LOOP:
@@ -312,8 +314,8 @@ BUTTERFLY_LOOP:
 OUTPUT_LOOP:
 			for(int j = 0; j < BU; j++){
 #pragma HLS UNROLL
-				output_stream0[j] << mem[num_of_stages][2*j];
-				output_stream1[j] << mem[num_of_stages][2*j+1];
+				Data2 out_data = (mem[num_of_stages][2*j+1], mem[num_of_stages][2*j]);
+				output_streams[j].write(out_data);
 			}
 
 			i++;
@@ -321,8 +323,7 @@ OUTPUT_LOOP:
 	}
 }
 
-void input_mem_stage_core(tapa::istream<Data>& x_0, tapa::istream<Data>& x_1,
-		tapa::ostream<Data>& even_y, tapa::ostream<Data>& odd_y){
+void input_mem_stage(tapa::istream<Data2>& i_stream, tapa::ostream<Data2>& o_stream){
 
 	// memory for entry with EVEN indices
 	Data mem0[2][DEPTH/2]; 
@@ -351,22 +352,22 @@ INPUT_MEM_STAGE_LOOP:
 #pragma HLS dependence variable=mem2 type=inter false
 #pragma HLS dependence variable=mem3 type=inter false
 
-		if(read_exist == true && write_done == false){
-			Data output_data0;
-			Data output_data1;
+		if( read_exist == true && write_done == false ){
+			Data data_e;
+			Data data_o;
 
 			// For even inputs 0 ~ n/2-1
 			if (write_i % 2 == 0){ // 0, 512 - 2, 514 ...
-				output_data0 = mem0[wr_s][write_i/2];
-				output_data1 = mem2[wr_s][write_i/2];
+				data_e = mem0[wr_s][write_i/2];
+				data_o = mem2[wr_s][write_i/2];
 			}
 			else{            // 1, 513 - 3, 515 ...
-				output_data0 = mem1[wr_s][write_i/2];
-				output_data1 = mem3[wr_s][write_i/2];
+				data_e = mem1[wr_s][write_i/2];
+				data_o = mem3[wr_s][write_i/2];
 			}
 
-			even_y.write(output_data0);
-			odd_y.write(output_data1);
+			Data2 data = (data_o, data_e);
+			o_stream.write(data);
 
 			write_i++;
 
@@ -376,19 +377,20 @@ INPUT_MEM_STAGE_LOOP:
 			} 
 		}
 
-		if(read_done == false && !x_0.empty() && !x_1.empty()){
-			Data output_data0 = x_0.read();
-			Data output_data1 = x_1.read();
+		if( read_done == false && !i_stream.empty() ){
+			Data2 data = i_stream.read();
+			Data data_e = data(K-1,0);
+			Data data_o = data(2*K-1,K);
 
 			if(read_i < DEPTH/2){
 				// For even inputs 0 ~ n/2-1      
-				mem0[rd_s][read_i] = output_data0;
-				mem1[rd_s][read_i] = output_data1;
+				mem0[rd_s][read_i] = data_e;
+				mem1[rd_s][read_i] = data_o;
 			}
 			else{
 				// For odd inputs n/2 ~ n-1
-				mem2[rd_s][read_i-DEPTH/2] = output_data0;
-				mem3[rd_s][read_i-DEPTH/2] = output_data1;
+				mem2[rd_s][read_i-DEPTH/2] = data_e;
+				mem3[rd_s][read_i-DEPTH/2] = data_o;
 			}
 
 			read_i++;
@@ -417,15 +419,6 @@ INPUT_MEM_STAGE_LOOP:
 	}
 }
 
-void input_mem_stage(tapa::istreams<Data, BU>& x_0, tapa::istreams<Data, BU>& x_1,
-		tapa::ostreams<Data, BU>& y_0, tapa::ostreams<Data, BU>& y_1){
-
-	tapa::task()
-		.invoke<tapa::detach, BU>(input_mem_stage_core, x_0, x_1, y_0, y_1);
-}
-
-
-
 
 #ifdef MCH
 
@@ -443,266 +436,281 @@ void read_dram_m(tapa::mmap<bits<DataVec>> x, tapa::ostreams<Data, 2*BU> & dramr
 	}
 }
 
-void read_collect_2_core_m(tapa::istream<Data> & dramrd_streams0, tapa::istream<Data> & dramrd_streams1, tapa::ostream<Data> & core_istream){
+void read_collect_2_core_m(tapa::istream<Data> & dramrd_streams0_e, tapa::istream<Data> & dramrd_streams1_e, tapa::istream<Data> & dramrd_streams0_o, tapa::istream<Data> & dramrd_streams1_o, tapa::ostream<Data2> & core_istream){
 
 READ_COLLECT_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
 			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
-				Data data;
+				Data data_e;
+				Data data_o;
 				if( ch == 0 ){
-					data = dramrd_streams0.read();
+					data_e = dramrd_streams0_e.read();
+					data_o = dramrd_streams0_o.read();
 				}
 				else{
-					data = dramrd_streams1.read();
+					data_e = dramrd_streams1_e.read();
+					data_o = dramrd_streams1_o.read();
 				}
 
+				Data2 data = (data_o, data_e);
 				core_istream.write( data );
 			}
 		}
 	}
 }
 
-void read_collect_4_core_m(tapa::istream<Data> & dramrd_streams0, tapa::istream<Data> & dramrd_streams1, tapa::istream<Data> & dramrd_streams2, tapa::istream<Data> & dramrd_streams3, tapa::ostream<Data> & core_istream){
+void read_collect_4_core_m(tapa::istream<Data> & dramrd_streams0_e, tapa::istream<Data> & dramrd_streams1_e, tapa::istream<Data> & dramrd_streams2_e, tapa::istream<Data> & dramrd_streams3_e, tapa::istream<Data> & dramrd_streams0_o, tapa::istream<Data> & dramrd_streams1_o, tapa::istream<Data> & dramrd_streams2_o, tapa::istream<Data> & dramrd_streams3_o, tapa::ostream<Data2> & core_istream){
 
 READ_COLLECT_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
 			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
-				Data data;
+				Data data_e;
+				Data data_o;
 				if( ch == 0 ){
-					data = dramrd_streams0.read();
+					data_e = dramrd_streams0_e.read();
+					data_o = dramrd_streams0_o.read();
 				}
 				else if( ch == 1 ){
-					data = dramrd_streams1.read();
+					data_e = dramrd_streams1_e.read();
+					data_o = dramrd_streams1_o.read();
 				}
 				else if( ch == 2 ){
-					data = dramrd_streams2.read();
+					data_e = dramrd_streams2_e.read();
+					data_o = dramrd_streams2_o.read();
 				}
 				else{
-					data = dramrd_streams3.read();
+					data_e = dramrd_streams3_e.read();
+					data_o = dramrd_streams3_o.read();
 				}
 
+				Data2 data = (data_o, data_e);
 				core_istream.write( data );
 			}
 		}
 	}
 }
 
-void read_collect_8_core_m(tapa::istream<Data> & dramrd_streams0, tapa::istream<Data> & dramrd_streams1, tapa::istream<Data> & dramrd_streams2, tapa::istream<Data> & dramrd_streams3, tapa::istream<Data> & dramrd_streams4, tapa::istream<Data> & dramrd_streams5, tapa::istream<Data> & dramrd_streams6, tapa::istream<Data> & dramrd_streams7, tapa::ostream<Data> & core_istream){
+void read_collect_8_core_m(tapa::istream<Data> & dramrd_streams0_e, tapa::istream<Data> & dramrd_streams1_e, tapa::istream<Data> & dramrd_streams2_e, tapa::istream<Data> & dramrd_streams3_e, tapa::istream<Data> & dramrd_streams4_e, tapa::istream<Data> & dramrd_streams5_e, tapa::istream<Data> & dramrd_streams6_e, tapa::istream<Data> & dramrd_streams7_e, tapa::istream<Data> & dramrd_streams0_o, tapa::istream<Data> & dramrd_streams1_o, tapa::istream<Data> & dramrd_streams2_o, tapa::istream<Data> & dramrd_streams3_o, tapa::istream<Data> & dramrd_streams4_o, tapa::istream<Data> & dramrd_streams5_o, tapa::istream<Data> & dramrd_streams6_o, tapa::istream<Data> & dramrd_streams7_o, tapa::ostream<Data2> & core_istream){
 
 READ_COLLECT_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
 			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
-				Data data;
+				Data data_e;
+				Data data_o;
 				if( ch == 0 ){
-					data = dramrd_streams0.read();
+					data_e = dramrd_streams0_e.read();
+					data_o = dramrd_streams0_o.read();
 				}
 				else if( ch == 1 ){
-					data = dramrd_streams1.read();
+					data_e = dramrd_streams1_e.read();
+					data_o = dramrd_streams1_o.read();
 				}
 				else if( ch == 2 ){
-					data = dramrd_streams2.read();
+					data_e = dramrd_streams2_e.read();
+					data_o = dramrd_streams2_o.read();
 				}
 				else if( ch == 3 ){
-					data = dramrd_streams3.read();
+					data_e = dramrd_streams3_e.read();
+					data_o = dramrd_streams3_o.read();
 				}
 				else if( ch == 4 ){
-					data = dramrd_streams4.read();
+					data_e = dramrd_streams4_e.read();
+					data_o = dramrd_streams4_o.read();
 				}
 				else if( ch == 5 ){
-					data = dramrd_streams5.read();
+					data_e = dramrd_streams5_e.read();
+					data_o = dramrd_streams5_o.read();
 				}
 				else if( ch == 6 ){
-					data = dramrd_streams6.read();
+					data_e = dramrd_streams6_e.read();
+					data_o = dramrd_streams6_o.read();
 				}
 				else{
-					data = dramrd_streams7.read();
+					data_e = dramrd_streams7_e.read();
+					data_o = dramrd_streams7_o.read();
 				}
 
+				Data2 data = (data_o, data_e);
 				core_istream.write( data );
 			}
 		}
 	}
 }
 
-void read_collect_2_m(tapa::istreams<Data, 2*BU> & dramrd_streams0, tapa::istreams<Data, 2*BU> & dramrd_streams1, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
+void read_collect_2_m(tapa::istreams<Data, BU> & dramrd_streams0_e, tapa::istreams<Data, BU> & dramrd_streams0_o, tapa::istreams<Data, BU> & dramrd_streams1_e, tapa::istreams<Data, BU> & dramrd_streams1_o, tapa::ostreams<Data2, BU> & core_istreams ){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(read_collect_2_core_m, dramrd_streams0, dramrd_streams1, core_istreams_e)
-		.invoke<tapa::detach, BU>(read_collect_2_core_m, dramrd_streams0, dramrd_streams1, core_istreams_o)
+		.invoke<tapa::detach, BU>(read_collect_2_core_m, dramrd_streams0_e, dramrd_streams1_e, dramrd_streams0_o, dramrd_streams1_o, core_istreams)
 	;
 }
 
-void read_collect_4_m(tapa::istreams<Data, 2*BU> & dramrd_streams0, tapa::istreams<Data, 2*BU> & dramrd_streams1, tapa::istreams<Data, 2*BU> & dramrd_streams2, tapa::istreams<Data, 2*BU> & dramrd_streams3, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
+void read_collect_4_m(tapa::istreams<Data, BU> & dramrd_streams0_e, tapa::istreams<Data, BU> & dramrd_streams0_o, tapa::istreams<Data, BU> & dramrd_streams1_e, tapa::istreams<Data, BU> & dramrd_streams1_o, tapa::istreams<Data, BU> & dramrd_streams2_e, tapa::istreams<Data, BU> & dramrd_streams2_o, tapa::istreams<Data, BU> & dramrd_streams3_e, tapa::istreams<Data, BU> & dramrd_streams3_o, tapa::ostreams<Data2, BU> & core_istreams ){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(read_collect_4_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, core_istreams_e)
-		.invoke<tapa::detach, BU>(read_collect_4_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, core_istreams_o)
+		.invoke<tapa::detach, BU>(read_collect_4_core_m, dramrd_streams0_e, dramrd_streams1_e, dramrd_streams2_e, dramrd_streams3_e, dramrd_streams0_o, dramrd_streams1_o, dramrd_streams2_o, dramrd_streams3_o, core_istreams)
 	;
 }
 
-void read_collect_8_m(tapa::istreams<Data, 2*BU> & dramrd_streams0, tapa::istreams<Data, 2*BU> & dramrd_streams1, tapa::istreams<Data, 2*BU> & dramrd_streams2, tapa::istreams<Data, 2*BU> & dramrd_streams3, tapa::istreams<Data, 2*BU> & dramrd_streams4, tapa::istreams<Data, 2*BU> & dramrd_streams5, tapa::istreams<Data, 2*BU> & dramrd_streams6, tapa::istreams<Data, 2*BU> & dramrd_streams7, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
+void read_collect_8_m(tapa::istreams<Data, BU> & dramrd_streams0_e, tapa::istreams<Data, BU> & dramrd_streams0_o, tapa::istreams<Data, BU> & dramrd_streams1_e, tapa::istreams<Data, BU> & dramrd_streams1_o, tapa::istreams<Data, BU> & dramrd_streams2_e, tapa::istreams<Data, BU> & dramrd_streams2_o, tapa::istreams<Data, BU> & dramrd_streams3_e, tapa::istreams<Data, BU> & dramrd_streams3_o, tapa::istreams<Data, BU> & dramrd_streams4_e, tapa::istreams<Data, BU> & dramrd_streams4_o, tapa::istreams<Data, BU> & dramrd_streams5_e, tapa::istreams<Data, BU> & dramrd_streams5_o, tapa::istreams<Data, BU> & dramrd_streams6_e, tapa::istreams<Data, BU> & dramrd_streams6_o, tapa::istreams<Data, BU> & dramrd_streams7_e, tapa::istreams<Data, BU> & dramrd_streams7_o, tapa::ostreams<Data2, BU> & core_istreams ){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(read_collect_8_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, dramrd_streams4, dramrd_streams5, dramrd_streams6, dramrd_streams7, core_istreams_e)
-		.invoke<tapa::detach, BU>(read_collect_8_core_m, dramrd_streams0, dramrd_streams1, dramrd_streams2, dramrd_streams3, dramrd_streams4, dramrd_streams5, dramrd_streams6, dramrd_streams7, core_istreams_o)
+		.invoke<tapa::detach, BU>(read_collect_8_core_m, dramrd_streams0_e, dramrd_streams1_e, dramrd_streams2_e, dramrd_streams3_e, dramrd_streams4_e, dramrd_streams5_e, dramrd_streams6_e, dramrd_streams7_e, dramrd_streams0_o, dramrd_streams1_o, dramrd_streams2_o, dramrd_streams3_o, dramrd_streams4_o, dramrd_streams5_o, dramrd_streams6_o, dramrd_streams7_o, core_istreams)
 	;
 }
 
-void read_collect_m(tapa::istreams<Data, 2*BU*GROUP_CH_NUM> & dramrd_streams, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o ){
+void read_collect_m(tapa::istreams<Data, 2*BU*GROUP_CH_NUM> & dramrd_streams, tapa::ostreams<Data2, BU> & core_istreams ){
 
 	tapa::task()
 #if GROUP_CH_NUM == 2
-		.invoke<tapa::detach, 1>(read_collect_2_m, dramrd_streams, dramrd_streams, core_istreams_e, core_istreams_o)
+		.invoke<tapa::detach, 1>(read_collect_2_m, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, core_istreams)
 #elif GROUP_CH_NUM == 4
-		.invoke<tapa::detach, 1>(read_collect_4_m, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, core_istreams_e, core_istreams_o)
+		.invoke<tapa::detach, 1>(read_collect_4_m, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, core_istreams)
 #elif GROUP_CH_NUM == 8
-		.invoke<tapa::detach, 1>(read_collect_8_m, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, core_istreams_e, core_istreams_o)
+		.invoke<tapa::detach, 1>(read_collect_8_m, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, dramrd_streams, core_istreams)
 #endif
 	;
 }
 
-void write_dist_2_core_m(tapa::ostream<Data> & dramwr_streams0, tapa::ostream<Data> & dramwr_streams1, tapa::istream<Data> & core_ostream){
+void write_dist_2_core_m(tapa::ostreams<Data,2> & dramwr_streams0, tapa::ostreams<Data,2> & dramwr_streams1, tapa::istream<Data2> & core_ostream){
 
 WRITE_DIST_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
 			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
-				Data data = core_ostream.read();
-				if( ch == 0 ){
-					dramwr_streams0.write( data );
+				Data2 data = core_ostream.read();
+				Data data_e = data(K-1,0);
+				Data data_o = data(2*K-1,K);
+
+				if( ch == 0 ){ 
+					dramwr_streams0[0].write( data_e );
+					dramwr_streams0[1].write( data_o );
 				}
-				else{
-					dramwr_streams1.write( data );
+				else{ 
+					dramwr_streams1[0].write( data_e );
+					dramwr_streams1[1].write( data_o );
 				}
 			}
 		}
 	}
 }
 
-void write_dist_4_core_m(tapa::ostream<Data> & dramwr_streams0, tapa::ostream<Data> & dramwr_streams1, tapa::ostream<Data> & dramwr_streams2, tapa::ostream<Data> & dramwr_streams3, tapa::istream<Data> & core_ostream){
+void write_dist_4_core_m(tapa::ostreams<Data,2> & dramwr_streams0, tapa::ostreams<Data,2> & dramwr_streams1, tapa::ostreams<Data,2> & dramwr_streams2, tapa::ostreams<Data,2> & dramwr_streams3, tapa::istream<Data2> & core_ostream){
 
 WRITE_DIST_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
 			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
-				Data data = core_ostream.read();
-				if( ch == 0 ){
-					dramwr_streams0.write( data );
+				Data2 data = core_ostream.read();
+				Data data_e = data(K-1,0);
+				Data data_o = data(2*K-1,K);
+
+				if( ch == 0 ){ 
+					dramwr_streams0[0].write( data_e );
+					dramwr_streams0[1].write( data_o );
 				}
-				else if( ch == 1 ){
-					dramwr_streams1.write( data );
+				else if( ch == 1 ){ 
+					dramwr_streams1[0].write( data_e );
+					dramwr_streams1[1].write( data_o );
 				}
-				else if( ch == 2 ){
-					dramwr_streams2.write( data );
+				else if( ch == 2 ){ 
+					dramwr_streams2[0].write( data_e );
+					dramwr_streams2[1].write( data_o );
 				}
-				else{
-					dramwr_streams3.write( data );
+				else{ 
+					dramwr_streams3[0].write( data_e );
+					dramwr_streams3[1].write( data_o );
 				}
 			}
 		}
 	}
 }
 
-void write_dist_8_core_m(tapa::ostream<Data> & dramwr_streams0, tapa::ostream<Data> & dramwr_streams1, tapa::ostream<Data> & dramwr_streams2, tapa::ostream<Data> & dramwr_streams3, tapa::ostream<Data> & dramwr_streams4, tapa::ostream<Data> & dramwr_streams5, tapa::ostream<Data> & dramwr_streams6, tapa::ostream<Data> & dramwr_streams7, tapa::istream<Data> & core_ostream){
+void write_dist_8_core_m(tapa::ostreams<Data,2> & dramwr_streams0, tapa::ostreams<Data,2> & dramwr_streams1, tapa::ostreams<Data,2> & dramwr_streams2, tapa::ostreams<Data,2> & dramwr_streams3, tapa::ostreams<Data,2> & dramwr_streams4, tapa::ostreams<Data,2> & dramwr_streams5, tapa::ostreams<Data,2> & dramwr_streams6, tapa::ostreams<Data,2> & dramwr_streams7, tapa::istream<Data2> & core_ostream){
 
 WRITE_DIST_LOOP:
 	for(;;){		
 		for(int ch = 0; ch < GROUP_CH_NUM; ch++){
 			for(int i = 0; i < n/(2*BU); i++){
 #pragma HLS PIPELINE II = 1
-				Data data = core_ostream.read();
-				if( ch == 0 ){
-					dramwr_streams0.write( data );
+				Data2 data = core_ostream.read();
+				Data data_e = data(K-1,0);
+				Data data_o = data(2*K-1,K);
+
+				if( ch == 0 ){ 
+					dramwr_streams0[0].write( data_e );
+					dramwr_streams0[1].write( data_o );
 				}
-				else if( ch == 1 ){
-					dramwr_streams1.write( data );
+				else if( ch == 1 ){ 
+					dramwr_streams1[0].write( data_e );
+					dramwr_streams1[1].write( data_o );
 				}
-				else if( ch == 2 ){
-					dramwr_streams2.write( data );
+				else if( ch == 2 ){ 
+					dramwr_streams2[0].write( data_e );
+					dramwr_streams2[1].write( data_o );
 				}
-				else if( ch == 3 ){
-					dramwr_streams3.write( data );
+				else if( ch == 3 ){ 
+					dramwr_streams3[0].write( data_e );
+					dramwr_streams3[1].write( data_o );
 				}
-				else if( ch == 4 ){
-					dramwr_streams4.write( data );
+				else if( ch == 4 ){ 
+					dramwr_streams4[0].write( data_e );
+					dramwr_streams4[1].write( data_o );
 				}
-				else if( ch == 5 ){
-					dramwr_streams5.write( data );
+				else if( ch == 5 ){ 
+					dramwr_streams5[0].write( data_e );
+					dramwr_streams5[1].write( data_o );
 				}
-				else if( ch == 6 ){
-					dramwr_streams6.write( data );
+				else if( ch == 6 ){ 
+					dramwr_streams6[0].write( data_e );
+					dramwr_streams6[1].write( data_o );
 				}
-				else{
-					dramwr_streams7.write( data );
+				else{ 
+					dramwr_streams7[0].write( data_e );
+					dramwr_streams7[1].write( data_o );
 				}
 			}
 		}
 	}
 }
 
-void write_dist_2_int_m(tapa::ostreams<Data, 2> & dramwr_streams0, tapa::ostreams<Data, 2> & dramwr_streams1, tapa::istream<Data> & core_ostreams_e, tapa::istream<Data> & core_ostreams_o ){
+void write_dist_2_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::istreams<Data2, BU> & core_ostreams ){
 
 	tapa::task()
-		.invoke<tapa::detach>(write_dist_2_core_m, dramwr_streams0, dramwr_streams1, core_ostreams_e)
-		.invoke<tapa::detach>(write_dist_2_core_m, dramwr_streams0, dramwr_streams1, core_ostreams_o)
+		.invoke<tapa::detach, BU>(write_dist_2_core_m, dramwr_streams0, dramwr_streams1, core_ostreams)
 	;
 }
 
-void write_dist_2_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
+void write_dist_4_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::ostreams<Data, 2*BU> & dramwr_streams2, tapa::ostreams<Data, 2*BU> & dramwr_streams3, tapa::istreams<Data2, BU> & core_ostreams ){
 
 	tapa::task()
-		.invoke<tapa::detach, BU>(write_dist_2_int_m, dramwr_streams0, dramwr_streams1, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, BU>(write_dist_4_core_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, core_ostreams)
 	;
 }
 
-void write_dist_4_int_m(tapa::ostreams<Data, 2> & dramwr_streams0, tapa::ostreams<Data, 2> & dramwr_streams1, tapa::ostreams<Data, 2> & dramwr_streams2, tapa::ostreams<Data, 2> & dramwr_streams3, tapa::istream<Data> & core_ostreams_e, tapa::istream<Data> & core_ostreams_o ){
+void write_dist_8_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::ostreams<Data, 2*BU> & dramwr_streams2, tapa::ostreams<Data, 2*BU> & dramwr_streams3, tapa::ostreams<Data, 2*BU> & dramwr_streams4, tapa::ostreams<Data, 2*BU> & dramwr_streams5, tapa::ostreams<Data, 2*BU> & dramwr_streams6, tapa::ostreams<Data, 2*BU> & dramwr_streams7, tapa::istreams<Data2, BU> & core_ostreams ){
 
 	tapa::task()
-		.invoke<tapa::detach>(write_dist_4_core_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, core_ostreams_e)
-		.invoke<tapa::detach>(write_dist_4_core_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, core_ostreams_o)
+		.invoke<tapa::detach, BU>(write_dist_8_core_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, dramwr_streams4, dramwr_streams5, dramwr_streams6, dramwr_streams7, core_ostreams)
 	;
 }
 
-void write_dist_4_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::ostreams<Data, 2*BU> & dramwr_streams2, tapa::ostreams<Data, 2*BU> & dramwr_streams3, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
-
-	tapa::task()
-		.invoke<tapa::detach, BU>(write_dist_4_int_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, core_ostreams_e, core_ostreams_o)
-	;
-}
-
-void write_dist_8_int_m(tapa::ostreams<Data, 2> & dramwr_streams0, tapa::ostreams<Data, 2> & dramwr_streams1, tapa::ostreams<Data, 2> & dramwr_streams2, tapa::ostreams<Data, 2> & dramwr_streams3, tapa::ostreams<Data, 2> & dramwr_streams4, tapa::ostreams<Data, 2> & dramwr_streams5, tapa::ostreams<Data, 2> & dramwr_streams6, tapa::ostreams<Data, 2> & dramwr_streams7, tapa::istream<Data> & core_ostreams_e, tapa::istream<Data> & core_ostreams_o ){
-
-	tapa::task()
-		.invoke<tapa::detach>(write_dist_8_core_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, dramwr_streams4, dramwr_streams5, dramwr_streams6, dramwr_streams7, core_ostreams_e)
-		.invoke<tapa::detach>(write_dist_8_core_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, dramwr_streams4, dramwr_streams5, dramwr_streams6, dramwr_streams7, core_ostreams_o)
-	;
-}
-
-void write_dist_8_m(tapa::ostreams<Data, 2*BU> & dramwr_streams0, tapa::ostreams<Data, 2*BU> & dramwr_streams1, tapa::ostreams<Data, 2*BU> & dramwr_streams2, tapa::ostreams<Data, 2*BU> & dramwr_streams3, tapa::ostreams<Data, 2*BU> & dramwr_streams4, tapa::ostreams<Data, 2*BU> & dramwr_streams5, tapa::ostreams<Data, 2*BU> & dramwr_streams6, tapa::ostreams<Data, 2*BU> & dramwr_streams7, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
-
-	tapa::task()
-		.invoke<tapa::detach, BU>(write_dist_8_int_m, dramwr_streams0, dramwr_streams1, dramwr_streams2, dramwr_streams3, dramwr_streams4, dramwr_streams5, dramwr_streams6, dramwr_streams7, core_ostreams_e, core_ostreams_o)
-	;
-}
-
-
-void write_dist_m(tapa::ostreams<Data, 2*BU*GROUP_CH_NUM> & dramwr_streams, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
+void write_dist_m(tapa::ostreams<Data, 2*BU*GROUP_CH_NUM> & dramwr_streams, tapa::istreams<Data2, BU> & core_ostreams ){
 
 	tapa::task()
 #if GROUP_CH_NUM == 2
-		.invoke<tapa::detach, 1>(write_dist_2_m, dramwr_streams, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, 1>(write_dist_2_m, dramwr_streams, dramwr_streams, core_ostreams)
 #elif GROUP_CH_NUM == 4
-		.invoke<tapa::detach, 1>(write_dist_4_m, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, 1>(write_dist_4_m, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, core_ostreams)
 #elif GROUP_CH_NUM == 8
-		.invoke<tapa::detach, 1>(write_dist_8_m, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, 1>(write_dist_8_m, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, dramwr_streams, core_ostreams)
 #endif
 	;
 }
@@ -735,44 +743,40 @@ void read_dram_s(tapa::mmap<bits<DataVec>> x, tapa::ostreams<DataVec, GROUP_CORE
 	}
 }
 
-void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data, BU> & core_istreams_e, tapa::ostreams<Data, BU> & core_istreams_o){
+void read_dist_s(tapa::istream<DataVec> & dramrd_stream, tapa::ostreams<Data2, BU> & core_istreams){
 
 READ_DIST_S_LOOP:
 	for(;;){
 #pragma HLS PIPELINE II = DRAM_CORE_WIDTH_RATIO
 		if( !dramrd_stream.empty() ){
-			DataVec data = dramrd_stream.read();
+			DataVec datavec = dramrd_stream.read();
 			for(int core = 0; core < DRAM_CORE_WIDTH_RATIO; core++){
 				for(int d = 0; d < BU; d++){
 #pragma HLS UNROLL	
-					// core_istreams_e[d].write( data[core*2*BU+d] );
-					core_istreams_e[d].write( static_cast<Data>(data[core*2*BU+d]) );
-				}
-				for(int d = 0; d < BU; d++){
-#pragma HLS UNROLL
-					// core_istreams_o[d].write( data[core*2*BU+BU+d] );			
-					core_istreams_o[d].write( static_cast<Data>( data[core*2*BU+BU+d] ) );
+					Data2 data = ( static_cast<Data>(datavec[core*2*BU+BU+d]), static_cast<Data>(datavec[core*2*BU+d]) );
+					core_istreams[d].write( data );
 				}
 			}
 		}
 	}
 }
 
-void write_reshape_s(tapa::ostream<DataVec> & dramwr_stream, tapa::istreams<Data, BU> & core_ostreams_e, tapa::istreams<Data, BU> & core_ostreams_o ){
+void write_reshape_s(tapa::ostream<DataVec> & dramwr_stream, tapa::istreams<Data2, BU> & core_ostreams ){
 
 WRITE_RESHAPE_S_LOOP:
 	for(;;){
 #pragma HLS PIPELINE II = DRAM_CORE_WIDTH_RATIO
-		DataVec data;
+		DataVec datavec;
 		for(int c = 0; c < DRAM_CORE_WIDTH_RATIO; c++){
 			for(int d = 0; d < BU; d++){
-				data[c*2*BU+2*d] = static_cast<HostData>( core_ostreams_e[d].read() );
-			}
-			for(int d = 0; d < BU; d++){
-				data[c*2*BU+2*d+1] = static_cast<HostData>( core_ostreams_o[d].read() );
+				Data2 data = core_ostreams[d].read();
+				Data data_e = data(K-1,0);
+				Data data_o = data(2*K-1,K);
+				datavec[c*2*BU+2*d] = static_cast<HostData>(data_e);
+				datavec[c*2*BU+2*d+1] = static_cast<HostData>(data_o);
 			}
 		}
-		dramwr_stream.write(data);
+		dramwr_stream.write(datavec);
 	}
 }
 
@@ -790,15 +794,14 @@ void write_dram_s(tapa::mmap<bits<DataVec>> y, tapa::istreams<DataVec, GROUP_COR
 #endif //MCH
 
 
-void ntt_core(tapa::istreams<Data, BU> core_istreams_e, tapa::istreams<Data, BU> core_istreams_o, tapa::ostreams<Data, BU> core_ostreams_e, tapa::ostreams<Data, BU> core_ostreams_o){
+void ntt_core(tapa::istreams<Data2, BU> core_istreams, tapa::ostreams<Data2, BU> core_ostreams){
 
-	tapa::streams<Data, BU*(num_temp_stage+1), 2> even_streams("even_streams");
-	tapa::streams<Data, BU*(num_temp_stage+1), 2> odd_streams("odd_streams");
+	tapa::streams<Data2, BU*(num_temp_stage+1), 2> core_streams("core_streams");
 
 	tapa::task()
-		.invoke<tapa::detach>(input_mem_stage, core_istreams_e, core_istreams_o, even_streams, odd_streams)
-		.invoke<tapa::detach, num_temp_stage>(temporal_stage, tapa::seq(), even_streams, odd_streams, even_streams, odd_streams)
-		.invoke<tapa::detach>(spatial_stages, even_streams, odd_streams, core_ostreams_e, core_ostreams_o); 
+		.invoke<tapa::detach, BU>(input_mem_stage, core_istreams, core_streams)
+		.invoke<tapa::detach, num_temp_stage>(temporal_stage, tapa::seq(), core_streams, core_streams)
+		.invoke<tapa::detach>(spatial_stages, core_streams, core_ostreams); 
 }
 
 #ifndef MCH
@@ -807,18 +810,16 @@ void ntt_group_dram1(tapa::mmap<bits<DataVec>> x, tapa::mmap<bits<DataVec>> y, i
 
 	tapa::streams<DataVec, GROUP_CORE_NUM, POLY_FIFO_DEPTH_S> dramrd_streams("dramrd_streams");
 	tapa::streams<DataVec, GROUP_CORE_NUM, POLY_FIFO_DEPTH_S> dramwr_streams("dramwr_streams");
-	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_istreams_e("core_istreams_e");
-	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_istreams_o("core_istreams_o");
-	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_ostreams_e("core_ostreams_e");
-	tapa::streams<Data, BU*GROUP_CORE_NUM, 2> core_ostreams_o("core_ostreams_o");
+	tapa::streams<Data2, BU*GROUP_CORE_NUM, 2> core_istreams("core_istreams");
+	tapa::streams<Data2, BU*GROUP_CORE_NUM, 2> core_ostreams("core_ostreams");
 
 	tapa::task()
 		.invoke<tapa::join>(read_dram_s, x, dramrd_streams, poly_num)
-	 	.invoke<tapa::detach, GROUP_CORE_NUM>(read_dist_s, dramrd_streams, core_istreams_e, core_istreams_o)
+	 	.invoke<tapa::detach, GROUP_CORE_NUM>(read_dist_s, dramrd_streams, core_istreams)
 
-		.invoke<tapa::detach, GROUP_CORE_NUM>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, GROUP_CORE_NUM>(ntt_core, core_istreams, core_ostreams)
 
-		.invoke<tapa::detach, GROUP_CORE_NUM>(write_reshape_s, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach, GROUP_CORE_NUM>(write_reshape_s, dramwr_streams, core_ostreams)
 		.invoke<tapa::join>(write_dram_s, y, dramwr_streams, poly_num)
 	;
 }
@@ -834,19 +835,17 @@ void ntt_group_dram2(
 
 	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
 	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
-	tapa::streams<Data, BU, 2> core_istreams_e("core_istreams_e");
-	tapa::streams<Data, BU, 2> core_istreams_o("core_istreams_o");
-	tapa::streams<Data, BU, 2> core_ostreams_e("core_ostreams_e");
-	tapa::streams<Data, BU, 2> core_ostreams_o("core_ostreams_o");
+	tapa::streams<Data2, BU, 2> core_istreams("core_istreams");
+	tapa::streams<Data2, BU, 2> core_ostreams("core_ostreams");
 
 	tapa::task()
 		.invoke<tapa::join>(read_dram_m, x0, dramrd_streams, poly_num)
 		.invoke<tapa::join>(read_dram_m, x1, dramrd_streams, poly_num)
-		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
+		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams)
 
-		.invoke<tapa::detach>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach>(ntt_core, core_istreams, core_ostreams)
 
-		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams)
 		.invoke<tapa::join>(write_dram_m, y0, dramwr_streams, poly_num)
 		.invoke<tapa::join>(write_dram_m, y1, dramwr_streams, poly_num)
 	;
@@ -865,21 +864,19 @@ void ntt_group_dram4(
 
 	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
 	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
-	tapa::streams<Data, BU, 2> core_istreams_e("core_istreams_e");
-	tapa::streams<Data, BU, 2> core_istreams_o("core_istreams_o");
-	tapa::streams<Data, BU, 2> core_ostreams_e("core_ostreams_e");
-	tapa::streams<Data, BU, 2> core_ostreams_o("core_ostreams_o");
+	tapa::streams<Data2, BU, 2> core_istreams("core_istreams");
+	tapa::streams<Data2, BU, 2> core_ostreams("core_ostreams");
 
 	tapa::task()
 		.invoke<tapa::join>(read_dram_m, x0, dramrd_streams, poly_num)
 		.invoke<tapa::join>(read_dram_m, x1, dramrd_streams, poly_num)
 		.invoke<tapa::join>(read_dram_m, x2, dramrd_streams, poly_num)
 		.invoke<tapa::join>(read_dram_m, x3, dramrd_streams, poly_num)
-		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
+		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams)
 
-		.invoke<tapa::detach>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach>(ntt_core, core_istreams, core_ostreams)
 
-		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams)
 		.invoke<tapa::join>(write_dram_m, y0, dramwr_streams, poly_num)
 		.invoke<tapa::join>(write_dram_m, y1, dramwr_streams, poly_num)
 		.invoke<tapa::join>(write_dram_m, y2, dramwr_streams, poly_num)
@@ -908,10 +905,8 @@ void ntt_group_dram8(
 
 	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramrd_streams("dramrd_streams");
 	tapa::streams<Data, 2*BU*GROUP_CH_NUM, POLY_FIFO_DEPTH_M> dramwr_streams("dramwr_streams");
-	tapa::streams<Data, BU, 2> core_istreams_e("core_istreams_e");
-	tapa::streams<Data, BU, 2> core_istreams_o("core_istreams_o");
-	tapa::streams<Data, BU, 2> core_ostreams_e("core_ostreams_e");
-	tapa::streams<Data, BU, 2> core_ostreams_o("core_ostreams_o");
+	tapa::streams<Data2, BU, 2> core_istreams("core_istreams");
+	tapa::streams<Data2, BU, 2> core_ostreams("core_ostreams");
 
 	tapa::task()
 		.invoke<tapa::join>(read_dram_m, x0, dramrd_streams, poly_num)
@@ -922,11 +917,11 @@ void ntt_group_dram8(
 		.invoke<tapa::join>(read_dram_m, x5, dramrd_streams, poly_num)
 		.invoke<tapa::join>(read_dram_m, x6, dramrd_streams, poly_num)
 		.invoke<tapa::join>(read_dram_m, x7, dramrd_streams, poly_num)
-		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams_e, core_istreams_o)
+		.invoke<tapa::detach>(read_collect_m, dramrd_streams, core_istreams)
 
-		.invoke<tapa::detach>(ntt_core, core_istreams_e, core_istreams_o, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach>(ntt_core, core_istreams, core_ostreams)
 
-		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams_e, core_ostreams_o)
+		.invoke<tapa::detach>(write_dist_m, dramwr_streams, core_ostreams)
 		.invoke<tapa::join>(write_dram_m, y0, dramwr_streams, poly_num)
 		.invoke<tapa::join>(write_dram_m, y1, dramwr_streams, poly_num)
 		.invoke<tapa::join>(write_dram_m, y2, dramwr_streams, poly_num)

@@ -12,7 +12,8 @@ constexpr int K = {K};
 
 using HostData = {DATA_FORMAT}; 
 using Data = ap_uint<K>; // ap_uint<14|23|32>
-
+using Data2 = ap_uint<K*2>;
+ 
 constexpr int DataCHLen = 64 / {DATA_BSIZE}; // 64 / sizeof(Data)
 constexpr int EffDataCHLen = {EffDataCHLen}; 
 
