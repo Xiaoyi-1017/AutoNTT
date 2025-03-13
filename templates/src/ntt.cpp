@@ -135,17 +135,22 @@ void bf_unit(const int stage, tapa::istream<Data2>& input_stream,
 	// memory for entry with EVEN indices
 	Data mem0[2][DEPTH/2]; 
 	Data mem1[2][DEPTH/2];
+#pragma HLS bind_storage variable=mem0 type=RAM_S2P impl=lutram 
+#pragma HLS bind_storage variable=mem1 type=RAM_S2P impl=lutram 
 
 	// memory for entry with ODD indices
 	Data mem2[2][DEPTH/2]; 
 	Data mem3[2][DEPTH/2];
+#pragma HLS bind_storage variable=mem2 type=RAM_S2P impl=lutram 
+#pragma HLS bind_storage variable=mem3 type=RAM_S2P impl=lutram 
 
 	//double buffer index
 	ap_uint<1> rd_s = 0;
 	ap_uint<1> wr_s = 1;
 
 	//memory read/write data count
-	unsigned int read_i = 0; unsigned int write_i = 0;    
+	ap_uint<logDEPTH> read_i = 0;     
+	ap_uint<logDEPTH> write_i = 0;     
 
 	bool read_exist = false;
 	bool read_done = false;
@@ -160,13 +165,13 @@ BF_UNIT_LOOP:
 #pragma HLS dependence variable=mem3 type=inter false
 
 		// Indexing
-		int read_mem_idx = (read_i >> shift) % 2;
+		ap_uint<1> read_mem_idx = (read_i >> shift) % 2;
 		int read_chunk = (read_i >> shift) / 2;
 		int read_idx = (read_i & mask);
 
 		int raddr = read_chunk*stride + read_idx;
 
-		int write_mem_idx = (write_i >> shift) % 2;
+		ap_uint<1> write_mem_idx = (write_i >> shift) % 2;
 		int write_chunk = (write_i >> shift) / 2;
 		int write_idx = (write_i & mask);
 
@@ -176,7 +181,7 @@ BF_UNIT_LOOP:
 			Data output_data0;
 			Data output_data1;
 
-			if (write_mem_idx == 0){
+			if(write_mem_idx == 0){
 				output_data0 = mem0[wr_s][waddr];
 				output_data1 = mem2[wr_s][waddr];
 			}
@@ -189,9 +194,7 @@ BF_UNIT_LOOP:
 			output_stream.write(output_data);
 
 			write_i++;
-
-			if(write_i == DEPTH){
-				write_i = 0;
+			if(write_i == 0){
 				write_done = true;
 			}
 		}
@@ -203,11 +206,11 @@ BF_UNIT_LOOP:
 			Data in_odd = in_data(2*K-1,K);
 			Data out_even, out_odd;
 
-			int tw_idx = ((read_i*BU) >> (logN - stage_shift)) + (1<<stage);
+			int tw_idx = (((int)read_i*BU) >> (logN - stage_shift)) + (1<<stage);
 
 			butterfly(in_even, in_odd,  tw_factors[tw_idx], &out_even, &out_odd);
 
-			if(read_mem_idx ==  0){    
+			if(read_mem_idx == 0){    
 				mem0[rd_s][raddr] = out_even;
 				mem1[rd_s][raddr] = out_odd;
 			}
@@ -217,16 +220,14 @@ BF_UNIT_LOOP:
 			}
 
 			read_i++;
-
-			if(read_i == DEPTH){
-				read_i = 0;
+			if(read_i == 0){
 				read_done = true;
 			}
 		}
 
 		//Go to the next polynomial when all existing data has been written out
 		//and when either reading data has finished or no data has been read
-		if( (read_done == true || read_i == 0) && (read_exist == false || write_done == true) ){
+		if( read_i == 0 && (read_exist == false || write_done == true) ){
 			if(read_done == true){
 				read_exist = true;
 			}
@@ -328,17 +329,22 @@ void input_mem_stage(tapa::istream<Data2>& i_stream, tapa::ostream<Data2>& o_str
 	// memory for entry with EVEN indices
 	Data mem0[2][DEPTH/2]; 
 	Data mem1[2][DEPTH/2];
+#pragma HLS bind_storage variable=mem0 type=RAM_S2P impl=lutram 
+#pragma HLS bind_storage variable=mem1 type=RAM_S2P impl=lutram 
 
 	// memory for entry with ODD indices
 	Data mem2[2][DEPTH/2]; 
 	Data mem3[2][DEPTH/2];
+#pragma HLS bind_storage variable=mem2 type=RAM_S2P impl=lutram 
+#pragma HLS bind_storage variable=mem3 type=RAM_S2P impl=lutram 
 
 	//double buffer index
 	ap_uint<1> rd_s = 0;
 	ap_uint<1> wr_s = 1;
 
 	//memory read/write data count
-	unsigned int read_i = 0; unsigned int write_i = 0;    
+	ap_uint<logDEPTH> read_i = 0;     
+	ap_uint<logDEPTH> write_i = 0;     
 
 	bool read_exist = false;
 	bool read_done = false;
@@ -370,9 +376,7 @@ INPUT_MEM_STAGE_LOOP:
 			o_stream.write(data);
 
 			write_i++;
-
-			if(write_i == DEPTH){
-				write_i = 0;
+			if(write_i == 0){
 				write_done = true;
 			} 
 		}
@@ -394,16 +398,14 @@ INPUT_MEM_STAGE_LOOP:
 			}
 
 			read_i++;
-
-			if(read_i == DEPTH){
-				read_i = 0;
+			if(read_i == 0){
 				read_done = true;
 			} 
 		}
 
 		//Go to the next polynomial when all existing data has been written out
 		//and when either reading data has finished or no data has been read
-		if( (read_done == true || read_i == 0) && (read_exist == false || write_done == true) ){
+		if( read_i == 0 && (read_exist == false || write_done == true) ){
 			if(read_done == true){
 				read_exist = true;
 			}
