@@ -96,6 +96,7 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
 
     DRAM_RATE = 0.5
     EffDataCHLen = round_to_nearest_power_of_2(DataCHLen*DRAM_RATE)
+    print(f"DataCHLen: {DataCHLen}, EffDataCHLen: {EffDataCHLen}")
 
     NUM_CORE = int(CH * EffDataCHLen / (2*BU))
 
@@ -105,6 +106,7 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     GROUP_NUM = int(min(CH, NUM_CORE))
     GROUP_CH_NUM = int(CH / GROUP_NUM)
     MCH = int(GROUP_CH_NUM > 1)
+    print(f"NUM_CORE: {NUM_CORE}, GROUP_NUM: {GROUP_NUM}, GROUP_CH_NUM: {GROUP_CH_NUM}")
 
     # it takes too much to calculate psi for large q (3221225473)
     psi = None
@@ -180,10 +182,7 @@ def main():
         print(f"{CH} * {veclen} should be divisible by {2 * BU}. Design not feasible.")
         return
 
-    NUM_NTT_CORES = CH * veclen // (2 * BU)
-
     print(f"Values used -> N: {N}, q: {mod}, HostData: {data_format}, BU: {BU}, CH: {CH}, veclen: {veclen}")
-    print(f"Number of NTT cores: {NUM_NTT_CORES}")
 
     # Create new folder
     folder_name = f"N{N}_BU{BU}_CH{CH}_q{mod}"
