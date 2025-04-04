@@ -7,7 +7,7 @@ Code generator for FPGA NTT accelerator
 
 - AMD Alveo U280 Platform - https://www.xilinx.com/publications/product-briefs/alveo-u280-product-brief.pdf
 
-- TAPA (0.1.20250226) - https://tapa.readthedocs.io/en/main/
+- TAPA (0.1.20250329) - https://tapa.readthedocs.io/en/main/
 
 - Rapidstream (2025.1.0212, recommended) - https://docs.rapidstream-da.com/
 
