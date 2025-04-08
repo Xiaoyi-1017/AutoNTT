@@ -124,13 +124,11 @@ void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_od
 }
 
 
-void bf_unit(const int stage, tapa::istream<Data2>& input_stream,  
-		tapa::ostream<Data2>& output_stream)
+void bf_unit(const int stage, tapa::istream<Data2>& input_stream, tapa::ostream<Data2>& output_stream)
 {
 	const int stage_shift = stage + 1;
-	const int stride = DEPTH >> stage_shift;
 	const int shift = num_temp_stage - stage_shift;
-	const int mask = (1<<shift) -1;
+	const ap_uint<logDEPTH> mask = (1<<shift) -1;
 
 	// memory for entry with EVEN indices
 	Data mem0[2][DEPTH/2]; 
@@ -166,16 +164,16 @@ BF_UNIT_LOOP:
 
 		// Indexing
 		ap_uint<1> read_mem_idx = (read_i >> shift) % 2;
-		int read_chunk = (read_i >> shift) / 2;
-		int read_idx = (read_i & mask);
 
-		int raddr = read_chunk*stride + read_idx;
+		ap_uint<logDEPTH> read_upper_addr = (read_i >> (shift+1)) << (shift);
+		ap_uint<logDEPTH> read_lower_addr = (read_i & mask);
+		ap_uint<logDEPTH> raddr = read_upper_addr | read_lower_addr;
 
 		ap_uint<1> write_mem_idx = (write_i >> shift) % 2;
-		int write_chunk = (write_i >> shift) / 2;
-		int write_idx = (write_i & mask);
 
-		int waddr = (write_chunk*stride) +  write_idx;
+		ap_uint<logDEPTH> write_upper_addr = (write_i >> (shift+1)) << (shift);
+		ap_uint<logDEPTH> write_lower_addr = (write_i & mask);
+		ap_uint<logDEPTH> waddr = write_upper_addr | write_lower_addr;
 
 		if(read_exist == true && write_done == false){
 			Data output_data0;
