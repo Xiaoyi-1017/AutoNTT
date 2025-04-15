@@ -54,6 +54,7 @@ def gen_config(ch: int, group_num: int, group_ch_num: int) -> None:
     floorplan_config = FloorplanConfig(
         port_pre_assignments=port_pre_assignments,
         cell_pre_assignments=cell_pre_assignments,
+        max_seconds=1000,
         dse_range_min=0.7,
         dse_range_max=0.8,
     )
@@ -73,9 +74,9 @@ def gen_config(ch: int, group_num: int, group_ch_num: int) -> None:
     #get_u280_precollected_device(DEVICE_CONFIG)
 
     config = PipelineConfig(
-        pp_scheme="single",
+        pp_scheme="double",
         pipeline_data_of_intra_slot_fifo="false",
-        max_seconds="60",
+        max_seconds="300",
         max_workers="1",
     )
     config.save_to_file(Path(PIPELINE_CONFIG))
