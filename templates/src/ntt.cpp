@@ -131,28 +131,26 @@ void bf_unit(const int stage, tapa::istream<Data2>& input_stream, tapa::ostream<
 	const ap_uint<logDEPTH> mask = (1<<shift) -1;
 
 	// memory for entry with EVEN indices
-	Data mem0[2][DEPTH/2]; 
-	Data mem1[2][DEPTH/2];
+	Data mem0[DEPTH/2]; 
+	Data mem1[DEPTH/2];
 #pragma HLS bind_storage variable=mem0 type=RAM_S2P impl=lutram 
 #pragma HLS bind_storage variable=mem1 type=RAM_S2P impl=lutram 
 
 	// memory for entry with ODD indices
-	Data mem2[2][DEPTH/2]; 
-	Data mem3[2][DEPTH/2];
+	Data mem2[DEPTH/2]; 
+	Data mem3[DEPTH/2];
 #pragma HLS bind_storage variable=mem2 type=RAM_S2P impl=lutram 
 #pragma HLS bind_storage variable=mem3 type=RAM_S2P impl=lutram 
 
-	//double buffer index
-	ap_uint<1> rd_s = 0;
-	ap_uint<1> wr_s = 1;
-
 	//memory read/write data count
-	ap_uint<logDEPTH> read_i = 0;     
-	ap_uint<logDEPTH> write_i = 0;     
+	ap_uint<logDEPTH> read_idx = 0;     
+	ap_uint<logDEPTH> write_idx = 0;     
 
-	bool read_exist = false;
-	bool read_done = false;
-	bool write_done = false;
+	ap_uint<logDEPTH> read_limit = 0;     
+	ap_uint<logDEPTH> write_limit = 0;     
+	bool set_read_limit = 0;
+	bool set_write_limit = 0;
+	bool mem_empty = true;
 
 BF_UNIT_LOOP:
 	for(;;){
@@ -163,80 +161,90 @@ BF_UNIT_LOOP:
 #pragma HLS dependence variable=mem3 type=inter false
 
 		// Indexing
-		ap_uint<1> read_mem_idx = (read_i >> shift) % 2;
+		ap_uint<1> read_mem_idx = (read_idx >> shift) % 2;
 
-		ap_uint<logDEPTH> read_upper_addr = (read_i >> (shift+1)) << (shift);
-		ap_uint<logDEPTH> read_lower_addr = (read_i & mask);
+		ap_uint<logDEPTH> read_upper_addr = (read_idx >> (shift+1)) << (shift);
+		ap_uint<logDEPTH> read_lower_addr = (read_idx & mask);
 		ap_uint<logDEPTH> raddr = read_upper_addr | read_lower_addr;
 
-		ap_uint<1> write_mem_idx = (write_i >> shift) % 2;
+		ap_uint<1> write_mem_idx = (write_idx >> shift) % 2;
 
-		ap_uint<logDEPTH> write_upper_addr = (write_i >> (shift+1)) << (shift);
-		ap_uint<logDEPTH> write_lower_addr = (write_i & mask);
+		ap_uint<logDEPTH> write_upper_addr = (write_idx >> (shift+1)) << (shift);
+		ap_uint<logDEPTH> write_lower_addr = (write_idx & mask);
 		ap_uint<logDEPTH> waddr = write_upper_addr | write_lower_addr;
 
-		if(read_exist == true && write_done == false){
+		// Safety checks
+		bool write_safe = write_limit != write_idx;
+		bool read_safe = read_limit != read_idx || mem_empty == true;
+
+		if( set_write_limit == 1 ){
+			mem_empty = false;
+		}
+		else if( set_read_limit == 1 && write_idx == read_idx ){
+			mem_empty = true;
+		}
+
+		if( set_read_limit == 1 ){
+			read_limit = write_idx;	
+			read_limit[shift] = 0;
+		}
+		set_read_limit = 0;
+
+		if( set_write_limit == 1 ){
+			write_limit = read_idx;	
+			write_limit[shift] = 0;
+		}
+		set_write_limit = 0;
+
+
+		if( write_safe == true ){
 			Data output_data0;
 			Data output_data1;
 
 			if(write_mem_idx == 0){
-				output_data0 = mem0[wr_s][waddr];
-				output_data1 = mem2[wr_s][waddr];
+				output_data0 = mem0[waddr];
+				output_data1 = mem2[waddr];
 			}
 			else{
-				output_data0 = mem1[wr_s][waddr];
-				output_data1 = mem3[wr_s][waddr];
+				output_data0 = mem1[waddr];
+				output_data1 = mem3[waddr];
 			}
 
 			Data2 output_data = (output_data1, output_data0);
 			output_stream.write(output_data);
 
-			write_i++;
-			if(write_i == 0){
-				write_done = true;
+			if(write_mem_idx == 1){    
+				set_read_limit = 1;
 			}
+
+			write_idx++;
 		}
 
-		if( read_done == false && !input_stream.empty() ){
+		if( read_safe == true && !input_stream.empty() ){
 
 			Data2 in_data = input_stream.read();
 			Data in_even = in_data(K-1,0);
 			Data in_odd = in_data(2*K-1,K);
 			Data out_even, out_odd;
 
-			int tw_idx = (((int)read_i*BU) >> (logN - stage_shift)) + (1<<stage);
+			int tw_idx = (((int)read_idx*BU) >> (logN - stage_shift)) + (1<<stage);
 
 			butterfly(in_even, in_odd,  tw_factors[tw_idx], &out_even, &out_odd);
 
 			if(read_mem_idx == 0){    
-				mem0[rd_s][raddr] = out_even;
-				mem1[rd_s][raddr] = out_odd;
+				mem0[raddr] = out_even;
+				mem1[raddr] = out_odd;
 			}
 			else{
-				mem2[rd_s][raddr] = out_even;
-				mem3[rd_s][raddr] = out_odd;
+				mem2[raddr] = out_even;
+				mem3[raddr] = out_odd;
 			}
 
-			read_i++;
-			if(read_i == 0){
-				read_done = true;
+			if(read_mem_idx == 1){    
+				set_write_limit = 1;
 			}
-		}
 
-		//Go to the next polynomial when all existing data has been written out
-		//and when either reading data has finished or no data has been read
-		if( read_i == 0 && (read_exist == false || write_done == true) ){
-			if(read_done == true){
-				read_exist = true;
-			}
-			else{
-				read_exist = false;
-			}
-			read_done = false;
-			write_done = false;
-
-			wr_s = rd_s;
-			rd_s ^= (ap_uint<1>)1;
+			read_idx++;
 		}
 	}
 }
@@ -341,8 +349,8 @@ void input_mem_stage(tapa::istream<Data2>& i_stream, tapa::ostream<Data2>& o_str
 	ap_uint<1> wr_s = 1;
 
 	//memory read/write data count
-	ap_uint<logDEPTH> read_i = 0;     
-	ap_uint<logDEPTH> write_i = 0;     
+	ap_uint<logDEPTH> read_idx = 0;     
+	ap_uint<logDEPTH> write_idx = 0;     
 
 	bool read_exist = false;
 	bool read_done = false;
@@ -361,20 +369,20 @@ INPUT_MEM_STAGE_LOOP:
 			Data data_o;
 
 			// For even inputs 0 ~ n/2-1
-			if (write_i % 2 == 0){ // 0, 512 - 2, 514 ...
-				data_e = mem0[wr_s][write_i/2];
-				data_o = mem2[wr_s][write_i/2];
+			if (write_idx % 2 == 0){ // 0, 512 - 2, 514 ...
+				data_e = mem0[wr_s][write_idx/2];
+				data_o = mem2[wr_s][write_idx/2];
 			}
 			else{            // 1, 513 - 3, 515 ...
-				data_e = mem1[wr_s][write_i/2];
-				data_o = mem3[wr_s][write_i/2];
+				data_e = mem1[wr_s][write_idx/2];
+				data_o = mem3[wr_s][write_idx/2];
 			}
 
 			Data2 data = (data_o, data_e);
 			o_stream.write(data);
 
-			write_i++;
-			if(write_i == 0){
+			write_idx++;
+			if(write_idx == 0){
 				write_done = true;
 			} 
 		}
@@ -384,26 +392,26 @@ INPUT_MEM_STAGE_LOOP:
 			Data data_e = data(K-1,0);
 			Data data_o = data(2*K-1,K);
 
-			if(read_i < DEPTH/2){
+			if(read_idx < DEPTH/2){
 				// For even inputs 0 ~ n/2-1      
-				mem0[rd_s][read_i] = data_e;
-				mem1[rd_s][read_i] = data_o;
+				mem0[rd_s][read_idx] = data_e;
+				mem1[rd_s][read_idx] = data_o;
 			}
 			else{
 				// For odd inputs n/2 ~ n-1
-				mem2[rd_s][read_i-DEPTH/2] = data_e;
-				mem3[rd_s][read_i-DEPTH/2] = data_o;
+				mem2[rd_s][read_idx-DEPTH/2] = data_e;
+				mem3[rd_s][read_idx-DEPTH/2] = data_o;
 			}
 
-			read_i++;
-			if(read_i == 0){
+			read_idx++;
+			if(read_idx == 0){
 				read_done = true;
 			} 
 		}
 
 		//Go to the next polynomial when all existing data has been written out
 		//and when either reading data has finished or no data has been read
-		if( read_i == 0 && (read_exist == false || write_done == true) ){
+		if( read_idx == 0 && (read_exist == false || write_done == true) ){
 			if(read_done == true){
 				read_exist = true;
 			}

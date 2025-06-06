@@ -7,9 +7,9 @@ Code generator for FPGA NTT accelerator
 
 - AMD Alveo U280 Platform - https://www.xilinx.com/publications/product-briefs/alveo-u280-product-brief.pdf
 
-- TAPA (0.1.20250329) - https://tapa.readthedocs.io/en/main/
+- TAPA (0.1.20250513) - https://tapa.readthedocs.io/en/main/
 
-- Rapidstream (2025.1.0212, recommended) - https://docs.rapidstream-da.com/
+- Rapidstream (2025.1.0509, recommended) - https://docs.rapidstream-da.com/
 
 ### Install Python Requirements
 ```bash
@@ -25,7 +25,7 @@ Please use generate_code.py to automatically generate an NTT project.
 | **N** | Transform size (polynomial degree) | 256, 512, 1024 | 1024 |
 | **q** | Prime modulus | 12289, 8380417, 3221225473 | 12289 |
 | **BU** | Number of butterfly units per stage | 1, 2, 4, 8, 16, 32 | 16 |
-| **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8 | 8 |
+| **CH** | Number of input HBM channels <br> (Total of 2×CH channels are used for input & output) | 1, 2, 4, 8, 16 | 8 |
 
 Example command (with default values):
 ```bash
