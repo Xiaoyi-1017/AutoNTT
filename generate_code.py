@@ -3,7 +3,7 @@ import argparse
 import math
 import os
 import shutil
-from twiddle_generator import get_nth_root_of_unity_and_psi, twiddle_generator_BR, generate_tw_h
+from twiddle_generator import get_nth_root_of_unity_and_psi, twiddle_generator_BR
 
 def check_q_and_data_length(q):
     
@@ -126,7 +126,8 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder, reduction):
 
     tw_factors = twiddle_generator_BR(mod, psi, n)
     # tw_h_factors = generate_tw_h(mod,K)
-    tw_h_factors = [(val << K) // mod for val in tw_factors]
+    if reduction == 2:
+    	tw_h_factors = [(val << K) // mod for val in tw_factors]
 
     # template_file = f"./{folder}/src/ntt.h"
     target_file = os.path.join(folder, "src/ntt.h")
@@ -152,7 +153,7 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder, reduction):
     header_content = header_content.replace("{TW_H_FACTORS}", ', '.join(map(str, tw_h_factors)))
     header_content = header_content.replace("{PSI}", str(psi))
     header_content = header_content.replace("// {MR_mode}",
-        				    f"#ifndef RDMODE\n#define RDMODE {reduction}\n#endif")
+        				    f"#ifndef REDUCTION_MODE\n#define REDUCTION_MODE {reduction}\n#endif")
 
     # output_file = os.path.join(folder, "./src/ntt.h")
     with open(target_file, "w") as file:
