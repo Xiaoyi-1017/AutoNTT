@@ -3,7 +3,7 @@ import argparse
 import math
 import os
 import shutil
-from twiddle_generator import get_nth_root_of_unity_and_psi, twiddle_generator_BR
+from twiddle_generator import get_nth_root_of_unity_and_psi, twiddle_generator_BR, generate_tw_h
 
 def check_q_and_data_length(q):
     
@@ -83,7 +83,7 @@ def generate_makefile(CH, GROUP_NUM, GROUP_CH_NUM, folder):
     #print(f"{output_file} has been generated.")
 
 
-def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
+def generate_header(n, mod, K, bits, data_format, BU, CH, folder, reduction):
     WIDTH = 2*BU
     DEPTH = n / WIDTH
     logDEPTH = int(math.log2(DEPTH))
@@ -125,6 +125,8 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
         return
 
     tw_factors = twiddle_generator_BR(mod, psi, n)
+    # tw_h_factors = generate_tw_h(mod,K)
+    tw_h_factors = [(val << K) // mod for val in tw_factors]
 
     # template_file = f"./{folder}/src/ntt.h"
     target_file = os.path.join(folder, "src/ntt.h")
@@ -147,7 +149,10 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder):
     header_content = header_content.replace("{GROUP_NUM}", str(GROUP_NUM))
     header_content = header_content.replace("{GROUP_CH_NUM}", str(GROUP_CH_NUM))
     header_content = header_content.replace("{TW_FACTORS}", ', '.join(map(str, tw_factors)))
+    header_content = header_content.replace("{TW_H_FACTORS}", ', '.join(map(str, tw_h_factors)))
     header_content = header_content.replace("{PSI}", str(psi))
+    header_content = header_content.replace("// {MR_mode}",
+        				    f"#ifndef RDMODE\n#define RDMODE {reduction}\n#endif")
 
     # output_file = os.path.join(folder, "./src/ntt.h")
     with open(target_file, "w") as file:
@@ -165,7 +170,9 @@ def main():
     # parser.add_argument("-bits", type=int, default=32, help="Coefficient bit-width")
     parser.add_argument("-BU", type=int, default=16, help="The size of BU.")
     parser.add_argument("-CH", type=int, default=8, help="The number of memory channels (input) ")
-
+    # Add reduction mode: 0=NewHope-NIST,1=Barrett,2=HEAX MulRed
+    parser.add_argument("-MR", "--reduction", type=int, choices=[0,1,2], default=0, help="Reduction mode: 0=NewHope-NIST,1=Barrett,2=HEAX MulRed")
+    
     args = parser.parse_args()
 
     N = args.N
@@ -185,7 +192,7 @@ def main():
     print(f"Values used -> N: {N}, q: {mod}, HostData: {data_format}, BU: {BU}, CH: {CH}, veclen: {veclen}")
 
     # Create new folder
-    folder_name = f"N{N}_BU{BU}_CH{CH}_q{mod}"
+    folder_name = f"N{N}_BU{BU}_CH{CH}_q{mod}_MR{args.reduction}"
     if os.path.exists(folder_name):
         print(f"Folder exists: {folder_name}. No folder created.")
     else:
@@ -205,7 +212,7 @@ def main():
 
         # Generate new files in the folder
         generate_ini(CH, folder_name)
-        generate_header(N, mod, K, bits, data_format, BU, CH, folder_name)
+        generate_header(N, mod, K, bits, data_format, BU, CH, folder_name, reduction=args.reduction)
 
  
 if __name__ == "__main__":

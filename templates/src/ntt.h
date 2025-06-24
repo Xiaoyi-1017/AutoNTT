@@ -1,6 +1,9 @@
 #ifndef NTT_H
 #define NTT_H
 
+// reduction mode selection: 0=Original, 1=Barrett, 2=HEAX MulRed
+// {MR_mode}
+
 #include <cmath>
 #include <algorithm>
 #include "hls_vector.h"
@@ -26,8 +29,10 @@ constexpr int log2(int x) {
     return (x <= 1) ? 0 : 1 + log2(x / 2);
 }
 
-#define MOD {MOD}
+#define MOD {MOD} // 12289 | 8380417 | 3221225473, 167772161 | 469762049 | 998244353 | 2013265921
 
+#if REDUCTION_MODE == 0
+// Original modular reduction support is limited 
 #if MOD == 12289
     #define USE_Q12289
 #elif MOD == 8380417
@@ -36,6 +41,21 @@ constexpr int log2(int x) {
     #define USE_Q3221225473
 #else
     #error "Unsupported mod value. Please define MOD as 12289 or 8380417."
+#endif
+
+#elif REDUCTION_MODE == 1
+#if MOD == 3221225473
+constexpr unsigned long long BARRETT_MU = 5726623059;
+#else
+constexpr unsigned long BARRETT_MU = (1ULL << (2 * K)) / MOD;
+#endif
+
+#elif REDUCTION_MODE == 2
+using Data_W = ap_uint<K+2>;
+using Data_W2 = ap_int<K*2+2>;
+using Data3  = ap_int<K>;
+using Data4  = ap_int<2*K>;
+
 #endif
 
 // Number of coefficients
@@ -77,5 +97,14 @@ constexpr HostData psi = {PSI};
 // Bit reversed array of twiddle factors
 const Data tw_factors[n] = {{TW_FACTORS}};
 
+// HEAX MulRed table
+#if REDUCTION_MODE == 2
+// const Data2 tw_h_factors[MOD] = ;
+const Data2 tw_h_factors[n] = {{TW_H_FACTORS}};
+#define GET_TW_H(idx) (tw_h_factors[idx])
+#else
+  #define GET_TW_H(idx) (Data2(0))
+
+#endif
 
 #endif // NTT_H

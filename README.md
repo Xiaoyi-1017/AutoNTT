@@ -5,7 +5,7 @@ Code generator for FPGA NTT accelerator
 
 - AMD Vitis (2023.2) - https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
 
-- AMD Alveo U280 Platform - https://www.xilinx.com/publications/product-briefs/alveo-u280-product-brief.pdf
+- AMD Alveo U55C Platform - https://www.amd.com/content/dam/amd/en/documents/products/accelerators/alveo/u55c/alveo-u55c-product-brief.pdf
 
 - TAPA (0.1.20250513) - https://tapa.readthedocs.io/en/main/
 

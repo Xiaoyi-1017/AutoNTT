@@ -1,7 +1,65 @@
 #include <iostream>
 #include "ntt.h"
 
-void reduce(Data coeff, Data tw_factor, Data &remainder){
+void reduce(Data coeff, Data tw_factor, Data2 tw_h_factor, Data &remainder) {
+#pragma HLS INLINE
+    Data r;
+#if   REDUCTION_MODE == 0
+    reduce_original(coeff, tw_factor, remainder);
+#elif REDUCTION_MODE == 1
+    reduce_barrett(coeff, tw_factor, remainder);
+#elif REDUCTION_MODE == 2
+    reduce_mulred(coeff, tw_factor, tw_h_factor, remainder);
+#else
+    #error "Unsupported REDUCTION_MODE"
+#endif
+}
+
+void reduce_mulred(Data coeff, Data tw_factor, Data2 tw_h_factor, Data &remainder){
+#pragma HLS INLINE
+
+        Data q = MOD;
+        Data2 prod_z = Data2(coeff) * Data2(tw_factor);
+        Data_W  z = Data_W(prod_z);
+        Data2 prod_t_ = Data2(coeff * tw_h_factor);
+        Data_W  t = Data_W(prod_t_ >> K);
+
+        Data2 prod_z2 = Data2(t) * Data2(q);
+        Data_W  z2 = Data_W(prod_z2);
+
+        Data_W res = Data4(z) - Data4(z2);
+	if (res >= q)
+        res = res - q;
+
+	remainder =  static_cast<Data>(res);
+}
+
+void reduce_barrett(Data coeff, Data tw_factor, Data &remainder){
+#pragma HLS INLINE
+
+	Data2 q = MOD;
+
+        // Full 2K-bit product
+        Data2 x = (Data2)coeff * (Data2)tw_factor;
+    
+        // BARRETT_MU = floor(2^(2K) / Q)
+
+        // q1 = floor(x / 2^K)
+        Data2 q1 = x >> K;
+        // q2 = q1 * MU
+        Data2 q2 = q1 * (Data2)BARRETT_MU;
+        // q3 = floor(q2 / 2^K)
+        Data2 q3 = q2 >> K;
+        // r = x - q3 * Q
+        Data2 r = x - q3 * q;
+        // Correct at most twice
+        if (r >= q) r -= q;
+        if (r >= q) r -= q;
+
+	remainder =  static_cast<Data>(r);
+}
+
+void reduce_original(Data coeff, Data tw_factor, Data &remainder){
 #pragma HLS INLINE
 
 	Data q = MOD;
@@ -104,13 +162,17 @@ void reduce(Data coeff, Data tw_factor, Data &remainder){
 	remainder =  static_cast<Data>(y);
 }
 
-void butterfly(Data even, Data odd, Data tw_factor, Data *out_even, Data* out_odd) {
+void butterfly(Data even, Data odd, Data tw_factor, Data2 tw_h_factor, Data *out_even, Data* out_odd) {
 #pragma HLS INLINE
 
 	ap_uint<K+2> mod = MOD;
 
 	Data reduced;
-	reduce(odd, tw_factor, reduced);
+#if REDUCTION_MODE == 2
+	reduce(odd, tw_factor, tw_h_factor, reduced);
+#else
+	reduce(odd, tw_factor, 0, reduced);
+#endif
 
 	ap_int<K+2> coeff_even = (ap_int<K+2>) even + (ap_int<K+2>) reduced;
 	ap_int<K+2> coeff_odd  = (ap_int<K+2>) even - (ap_int<K+2>) reduced;
@@ -229,7 +291,7 @@ BF_UNIT_LOOP:
 
 			int tw_idx = (((int)read_idx*BU) >> (logN - stage_shift)) + (1<<stage);
 
-			butterfly(in_even, in_odd,  tw_factors[tw_idx], &out_even, &out_odd);
+			butterfly(in_even, in_odd,  tw_factors[tw_idx], GET_TW_H(tw_idx), &out_even, &out_odd);
 
 			if(read_mem_idx == 0){    
 				mem0[raddr] = out_even;
@@ -312,7 +374,7 @@ BUTTERFLY_LOOP:
 						: ( j << (shift+1) ) + (k & next_mask) * 2 + (k >> (shift-1));
 					int ind_odd = ind_even + stride;
 
-					butterfly(mem[s][2*idx], mem[s][2*idx+1], tw_factors[tw_idx], &out_even, &out_odd);
+					butterfly(mem[s][2*idx], mem[s][2*idx+1], tw_factors[tw_idx], GET_TW_H(tw_idx), &out_even, &out_odd);
 					mem[s+1][ind_even] = out_even;
 					mem[s+1][ind_odd] = out_odd;                   
 				}
