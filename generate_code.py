@@ -150,7 +150,8 @@ def generate_header(n, mod, K, bits, data_format, BU, CH, folder, reduction):
     header_content = header_content.replace("{GROUP_NUM}", str(GROUP_NUM))
     header_content = header_content.replace("{GROUP_CH_NUM}", str(GROUP_CH_NUM))
     header_content = header_content.replace("{TW_FACTORS}", ', '.join(map(str, tw_factors)))
-    header_content = header_content.replace("{TW_H_FACTORS}", ', '.join(map(str, tw_h_factors)))
+    if reduction == 2:
+    	header_content = header_content.replace("{TW_H_FACTORS}", ', '.join(map(str, tw_h_factors)))
     header_content = header_content.replace("{PSI}", str(psi))
     header_content = header_content.replace("// {MR_mode}",
         				    f"#ifndef REDUCTION_MODE\n#define REDUCTION_MODE {reduction}\n#endif")
