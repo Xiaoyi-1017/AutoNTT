@@ -4,12 +4,6 @@
 // reduction mode selection: 0=Original, 1=Barrett, 2=HEAX MulRed
 // {MR_mode}
 
-// TW_MODE
-// 0 = all pre-calculated tables;
-// 1 = both tw_factors and tw_h on-the-fly;
-// 2 = tw_factors pre-calculated, tw_h on-the-fly
-#define TW_MODE 1
-
 #include <cmath>
 #include <algorithm>
 #include "hls_vector.h"
@@ -100,80 +94,18 @@ constexpr int POLY_FIFO_DEPTH_M = n / (2*BU);
 
 constexpr HostData psi = {PSI};
 
-#if TW_MODE == 0 || TW_MODE == 2
 // Bit reversed array of twiddle factors
 const Data tw_factors[n] = {{TW_FACTORS}};
-#endif
 
 // HEAX MulRed table
 #if REDUCTION_MODE == 2
-#if TW_MODE == 0
 // const Data2 tw_h_factors[MOD] = ;
 const Data2 tw_h_factors[n] = {{TW_H_FACTORS}};
 #define GET_TW_H(idx) (tw_h_factors[idx])
-#endif
-
 #else
   #define GET_TW_H(idx) (Data2(0))
+
 #endif
-#endif
-
-#if TW_MODE != 0
-inline int bit_reverse(int x, int logN) {
-#pragma HLS INLINE
-    int y = 0;
-    for(int b = 0; b < logN; ++b) {
-        y = (y<<1) | (x & 1);
-        x >>= 1;
-    }
-    return y;
-}
-
-// base^exp mod MOD
-inline Data modexp(Data base, int exp) {
-#pragma HLS INLINE
-    Data result = 1;
-    Data2 b = base;
-    while (exp) {
-        if (exp & 1) result = (Data)((Data2)result * b % MOD);
-        b = (Data2)((Data2)b * b % MOD);
-        exp >>= 1;
-    }
-    return result;
-}
-
-// twiddle_generator
-inline Data compute_tw_factor(int idx) {
-#pragma HLS INLINE
-    // int natural_idx = bit_reverse(idx, logN);
-    // return modexp(psi, natural_idx);
-    return modexp(psi, idx);
-}
-
-inline Data2 compute_tw_h(int idx) {
-#pragma HLS INLINE
-#if TW_MODE == 1
-    // All on-the-fly
-    Data twf = compute_tw_factor(idx);
-    Data2 tw_h_shifted = (Data2)twf << K;
-    return (Data2)(tw_h_shifted / MOD);
-#elif TW_MODE == 2
-    // tw_factors pre-calculated, tw_h on-the-fly
-    Data twf = tw_factors[idx]; 
-    Data2 tw_h_shifted = (Data2)twf << K;  
-    return (Data2)(tw_h_shifted / MOD);  
-#else
-    return tw_h_factors[idx];
-#endif
-
-}
-
-inline Data2 compute_tw_h_from_twf(Data twf) {
-#pragma HLS INLINE
-    // Directly twf << K
-    Data2 shifted = (Data2)twf << K;
-    return (Data2)(shifted / MOD);
-}
 
 #if REDUCTION_MODE == 2
 inline void reduce_mulred(Data coeff, Data tw_factor, Data2 tw_h_factor, Data &remainder){
@@ -329,3 +261,4 @@ inline void reduce_original(Data coeff, Data tw_factor, Data &remainder){
 #endif
 
 #endif // NTT_H
+

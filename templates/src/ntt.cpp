@@ -144,35 +144,7 @@ BF_UNIT_LOOP:
 
 			int tw_idx = (((int)read_idx*BU) >> (logN - stage_shift)) + (1<<stage);
 
-#if TW_MODE == 0
-					// All pre-computed
-					Data  twf = tw_factors[tw_idx];
-					Data2 twh = GET_TW_H(tw_idx);
-#elif TW_MODE == 1
-					// All on-the-fly
-					int grp = tw_idx - (1 << stage);
-					int exp = grp << stage;
-        				Data  twf = compute_tw_factor(exp);
-        				//Data  twf = compute_tw_factor(tw_idx);
-#if REDUCTION_MODE == 2 
-        				// Data2 twh = compute_tw_h(tw_idx);
-        				Data2 twh = compute_tw_h_from_twf(twf);
-#else
-					Data2 twh = GET_TW_H(tw_idx);
-#endif        				
-        				
-#elif TW_MODE == 2
-					// tw_factors pre-calculated, tw_h on-the-fly
-        				Data  twf = tw_factors[tw_idx];
-#if REDUCTION_MODE == 2 
-        				Data2 twh = compute_tw_h(tw_idx);
-#else
-					Data2 twh = GET_TW_H(tw_idx);
-#endif    
-   			
-#endif
-
-			butterfly(in_even, in_odd,  twf, twh, &out_even, &out_odd);
+			butterfly(in_even, in_odd,  tw_factors[tw_idx], GET_TW_H(tw_idx), &out_even, &out_odd);
 
 			if(read_mem_idx == 0){    
 				mem0[raddr] = out_even;
@@ -255,35 +227,7 @@ BUTTERFLY_LOOP:
 						: ( j << (shift+1) ) + (k & next_mask) * 2 + (k >> (shift-1));
 					int ind_odd = ind_even + stride;
 
-#if TW_MODE == 0
-					// All pre-computed
-					Data  twf = tw_factors[tw_idx];
-					Data2 twh = GET_TW_H(tw_idx);
-#elif TW_MODE == 1
-					// All on-the-fly
-					int grp = tw_idx - (1<<current_stage);
-					int exp = grp << current_stage;
-        				Data  twf = compute_tw_factor(exp);
-        				// Data  twf = compute_tw_factor(tw_idx);
-#if REDUCTION_MODE == 2 
-        				// // Data2 twh = compute_tw_h(tw_idx);
-        				Data2 twh = compute_tw_h_from_twf(twf);
-#else
-					Data2 twh = GET_TW_H(tw_idx);
-#endif 
-
-#elif TW_MODE == 2
-					// tw_factors pre-calculated, tw_h on-the-fly
-        				Data  twf = tw_factors[tw_idx];
-#if REDUCTION_MODE == 2 
-        				Data2 twh = compute_tw_h(tw_idx);
-#else
-					Data2 twh = GET_TW_H(tw_idx);
-#endif 
-  
-#endif 
-        
-					butterfly(mem[s][2*idx], mem[s][2*idx+1], twf, twh, &out_even, &out_odd);
+					butterfly(mem[s][2*idx], mem[s][2*idx+1], tw_factors[tw_idx], GET_TW_H(tw_idx), &out_even, &out_odd);
 					mem[s+1][ind_even] = out_even;
 					mem[s+1][ind_odd] = out_odd;                   
 				}
